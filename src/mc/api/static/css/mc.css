@@ -1,0 +1,306 @@
+/* ============================================================
+   Fita Arquivada — design system for the Morning Crypto archive
+   Broadcast-terminal ledger: warm charcoal ground, bitcoin-amber
+   accent, monospace data over serif prose. The tape counter
+   (T+HH:MM:SS) is the identity anchor of the product.
+   ============================================================ */
+
+:root {
+  /* tone: warm charcoal, one amber accent, cream ink */
+  --mc-ground: #16130f;
+  --mc-ground-2: #1d1915;
+  --mc-line: #3a332a;
+  --mc-ink: #f2ead9;
+  --mc-ink-dim: #a89e8a;
+  --mc-amber: #f7a600;
+  --mc-amber-deep: #b96f00;
+  --mc-mark-ink: #16130f;
+
+  /* type: mono leads, serif supports */
+  --mc-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SFMono-Regular",
+    Menlo, Consolas, monospace;
+  --mc-serif: Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+
+  --mc-rhythm: 0.375rem;
+}
+
+html {
+  background: var(--mc-ground);
+}
+
+body {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(247, 166, 0, 0.015) 0 1px,
+      transparent 1px 3px
+    ),
+    var(--mc-ground);
+  color: var(--mc-ink);
+  font-family: var(--mc-serif);
+  font-size: 1.0625rem;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: calc(var(--mc-rhythm) * 6) var(--mc-rhythm) calc(var(--mc-rhythm) * 8);
+}
+
+::selection {
+  background: var(--mc-amber);
+  color: var(--mc-mark-ink);
+}
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  border-bottom: 1px solid var(--mc-line);
+  padding-bottom: calc(var(--mc-rhythm) * 3);
+  margin-bottom: calc(var(--mc-rhythm) * 4);
+}
+
+.masthead .over {
+  font-family: var(--mc-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mc-ink-dim);
+  margin: 0 0 var(--mc-rhythm);
+}
+
+.masthead .wordmark {
+  font-family: var(--mc-mono);
+  font-weight: 800;
+  font-size: clamp(2.2rem, 8vw, 4rem);
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  margin: 0;
+  color: var(--mc-ink);
+}
+
+.masthead .wordmark span {
+  color: var(--mc-amber);
+  font-weight: 400;
+}
+
+.masthead .promise {
+  font-style: italic;
+  color: var(--mc-ink-dim);
+  margin: var(--mc-rhythm) 0 0;
+}
+
+/* ---------- search console ---------- */
+
+.console {
+  display: flex;
+  gap: var(--mc-rhythm);
+  align-items: center;
+  margin: 0 0 calc(var(--mc-rhythm) * 5);
+}
+
+.console input[type="search"] {
+  flex: 1;
+  background: var(--mc-ground-2);
+  border: 1px solid var(--mc-line);
+  border-left: 4px solid var(--mc-amber);
+  border-radius: 2px;
+  color: var(--mc-ink);
+  font-family: var(--mc-mono);
+  font-size: 1.05rem;
+  padding: calc(var(--mc-rhythm) * 2);
+}
+
+.console input[type="search"]:focus {
+  outline: 2px solid var(--mc-amber);
+  outline-offset: 1px;
+}
+
+.console button {
+  background: var(--mc-amber);
+  border: none;
+  border-radius: 2px;
+  color: var(--mc-mark-ink);
+  font-family: var(--mc-mono);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: calc(var(--mc-rhythm) * 2) calc(var(--mc-rhythm) * 3);
+  cursor: pointer;
+}
+
+.console button:hover {
+  background: var(--mc-amber-deep);
+  color: var(--mc-ink);
+}
+
+.console-busy {
+  font-family: var(--mc-mono);
+  color: var(--mc-amber);
+  width: 1.5rem;
+}
+
+/* ---------- results ledger ---------- */
+
+.ledger {
+  display: grid;
+  gap: calc(var(--mc-rhythm) * 3);
+}
+
+.hit {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, auto) 1fr;
+  gap: calc(var(--mc-rhythm) * 2);
+  border: 1px solid var(--mc-line);
+  border-radius: 2px;
+  background: var(--mc-ground-2);
+  padding: calc(var(--mc-rhythm) * 2);
+}
+
+/* the anchor: an oversized tape counter, as on a deck's readout */
+.tape {
+  align-self: start;
+  text-decoration: none;
+  border-right: 1px solid var(--mc-line);
+  padding-right: calc(var(--mc-rhythm) * 2);
+}
+
+.tape-counter {
+  display: inline-block;
+  font-family: var(--mc-mono);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
+  color: var(--mc-amber);
+  text-shadow: 0 0 14px rgba(247, 166, 0, 0.35);
+}
+
+.tape:hover .tape-counter {
+  color: var(--mc-ink);
+}
+
+.hit-body {
+  min-width: 0;
+}
+
+.hit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--mc-rhythm) * 2);
+  font-family: var(--mc-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mc-ink-dim);
+  margin-bottom: calc(var(--mc-rhythm) * 1);
+}
+
+.hit-title {
+  color: var(--mc-ink);
+  font-weight: 700;
+}
+
+.hit-snippet {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.hit-snippet mark {
+  background: var(--mc-amber);
+  color: var(--mc-mark-ink);
+  padding: 0 2px;
+}
+
+/* ---------- player (Story 4.9) ---------- */
+
+.player {
+  margin-top: calc(var(--mc-rhythm) * 2);
+}
+
+.player summary {
+  cursor: pointer;
+  font-family: var(--mc-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  color: var(--mc-amber);
+}
+
+.player summary:hover {
+  color: var(--mc-ink);
+}
+
+.player iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--mc-line);
+  border-radius: 2px;
+  margin-top: calc(var(--mc-rhythm) * 2);
+}
+
+/* ---------- empty / idle / loading states ---------- */
+
+.empty-head {
+  font-family: var(--mc-mono);
+  font-size: 1.1rem;
+  color: var(--mc-ink);
+  border: 1px dashed var(--mc-line);
+  padding: calc(var(--mc-rhythm) * 3);
+  margin: 0 0 var(--mc-rhythm);
+}
+
+.empty-freshness {
+  color: var(--mc-ink-dim);
+  font-size: 0.9rem;
+}
+
+.idle-hint {
+  color: var(--mc-ink-dim);
+  font-style: italic;
+  text-align: center;
+}
+
+/* loading is visibly different from empty: amber pulse on a full-width bar */
+.htmx-request .idle-hint,
+.htmx-request .empty-head {
+  display: none;
+}
+
+.console-busy {
+  display: none;
+}
+
+.htmx-request .console-busy {
+  display: inline;
+}
+
+/* ---------- colophon ---------- */
+
+.colophon {
+  border-top: 1px solid var(--mc-line);
+  margin-top: calc(var(--mc-rhythm) * 6);
+  padding-top: calc(var(--mc-rhythm) * 2);
+  font-family: var(--mc-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--mc-ink-dim);
+}
+
+.colophon-note {
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (max-width: 640px) {
+  .hit {
+    grid-template-columns: 1fr;
+  }
+  .tape {
+    border-right: none;
+  }
+}

@@ -1,0 +1,26 @@
+{# One search result: tape-counter timestamp, metadata ledger row, snippet,
+   and a click-to-load youtube-nocookie player pinned to the exact moment. #}
+<article class="hit">
+  <a class="tape" href="{{ r.url }}" aria-label="assistir a partir de {{ r.tape }}">
+    <span class="tape-counter">{{ r.tape }}</span>
+  </a>
+  <div class="hit-body">
+    <header class="hit-meta">
+      <span class="hit-title">{{ r.title }}</span>
+      <span class="hit-data">ep {{ r.episode or "—" }}</span>
+      <span class="hit-data">{{ r.date or "sem data" }}</span>
+      <span class="hit-data">{{ r.channel or "morning crypto" }}</span>
+    </header>
+    <p class="hit-snippet">{{ r.snippet | safe }}</p>
+    <details class="player">
+      <summary>▶ assistir o trecho em {{ r.tape }}</summary>
+      <iframe
+        src="https://www.youtube-nocookie.com/embed/{{ r.video_id }}?start={{ r.start_seconds }}"
+        loading="lazy"
+        allow="accelerometer; autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen
+        title="trecho em {{ r.tape }}"
+      ></iframe>
+    </details>
+  </div>
+</article>

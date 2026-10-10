@@ -12,8 +12,10 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from qdrant_client import QdrantClient
 
 from mc.api.health import health_snapshot
@@ -34,21 +36,41 @@ from mc.state import StateStore
 # clamped (never rejected) so no caller can demand the whole archive.
 MAX_SEARCH_LIMIT = 50
 
+TEMPLATES = Jinja2Templates(
+    directory=Path(__file__).parent / "templates", autoescape=True
+)
 
-def _serialize(result: SearchResult, query: str) -> dict:
-    # Epic field order: title,url,start_seconds,date,episode,channel,snippet,score.
-    # SearchResult carries no video title; `episode` is the human-facing label,
-    # so it doubles as the title (fallback: "vídeo {video_id}").
+
+def _tape(start_seconds: int) -> str:
+    """Tape-counter rendering of the chunk offset — the design anchor."""
+    total = int(start_seconds or 0)
+    hours, rest = divmod(total, 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f"T+{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _freshness_line(last_update: str | None) -> str:
+    """Portuguese archive-freshness line shown in the footer/empty state."""
+    if not last_update:
+        return "acervo atualizado agora mesmo."
+    date = last_update[:10]
+    return f"acervo atualizado até {date}"
+
+
+def _video_result(result: SearchResult, query: str) -> dict:
     return {
         "title": result.episode or f"vídeo {result.video_id}",
-        "url": result.url,
-        "start_seconds": result.start_seconds,
-        "date": result.date,
         "episode": result.episode,
+        "date": result.date,
         "channel": result.channel,
         "snippet": build_snippet(result.text or "", query).highlighted,
+        "url": result.url,
+        "video_id": result.video_id,
+        "start_seconds": result.start_seconds,
+        "tape": _tape(result.start_seconds),
         "score": result.score,
     }
+
 
 
 def create_app(
@@ -75,6 +97,11 @@ def create_app(
             store.close()
 
     app = FastAPI(title="mc-semantic-search", version="0.1.0")
+    app.mount(
+        "/static",
+        StaticFiles(directory=Path(__file__).parent / "static"),
+        name="static",
+    )
     # Story 4.7 (ResultCache) will plug in here: the cache is an embedder-level
     # LRU and the engine embeds internally, so the wiring lands in engine.py.
     app.state.cache = cache
@@ -86,13 +113,7 @@ def create_app(
         except Exception:  # unreadable state must never break search
             return {"last_update": None}
 
-    @app.get("/search")
-    def search_endpoint(
-        query: str = Query(min_length=1),
-        limit: int = Query(default=10, ge=1),
-    ) -> dict:
-        effective_limit = min(limit, MAX_SEARCH_LIMIT)
-        started = time.perf_counter()
+    def _video_results(query: str, effective_limit: int) -> list[dict]:
         try:
             results: list[SearchResult] = run_search(
                 qdrant, query, limit=effective_limit, collection=collection
@@ -101,16 +122,65 @@ def create_app(
             raise HTTPException(
                 status_code=503, detail="qdrant unreachable"
             ) from exc
-        # Story 4.3: verbatim-phrase queries demote non-literal hits so the
-        # exact moment surfaces first (never dropped, count unchanged).
         results = apply_boost(results, parse_query(query))
+        return [_video_result(r, query) for r in results]
+
+    @app.get("/search")
+    def search_endpoint(
+        query: str = Query(min_length=1),
+        limit: int = Query(default=10, ge=1),
+    ) -> dict:
+        effective_limit = min(limit, MAX_SEARCH_LIMIT)
+        started = time.perf_counter()
+        results = _video_results(query, effective_limit)
         took_ms = (time.perf_counter() - started) * 1000
         return {
             "query": query,
             "took_ms": took_ms,
             "freshness": _freshness(),
-            "results": [_serialize(r, query) for r in results],
+            "results": [
+                {
+                    key: r[key]
+                    for key in (
+                        "title",
+                        "url",
+                        "start_seconds",
+                        "date",
+                        "episode",
+                        "channel",
+                        "snippet",
+                        "score",
+                    )
+                }
+                for r in results
+            ],
         }
+
+    @app.get("/results", response_class=HTMLResponse)
+    def results_partial(query: str = Query(default="")) -> str:
+        results = _video_results(query, MAX_SEARCH_LIMIT) if query.strip() else []
+        return TEMPLATES.get_template("results.html").render(
+            results=results,
+            query=query,
+            freshness_line=_freshness_line(_freshness()["last_update"]),
+        )
+
+    @app.get("/", response_class=HTMLResponse)
+    def search_page(
+        request: Request, query: str = Query(default="")
+    ) -> HTMLResponse:
+        stripped = query.strip()
+        results = _video_results(query, MAX_SEARCH_LIMIT) if stripped else []
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="search.html",
+            context={
+                "query": stripped,
+                "results": results,
+                "freshness_line": _freshness_line(_freshness()["last_update"]),
+                "stats": "",
+            },
+        )
 
     @app.get("/health")
     def health_endpoint() -> JSONResponse:

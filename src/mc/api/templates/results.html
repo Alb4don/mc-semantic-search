@@ -1,0 +1,11 @@
+{# htmx partial: the results ledger for the current query. #}
+{% if results %}
+<div class="ledger" aria-live="polite">
+  {% for r in results %}{% include "result.html" %}{% endfor %}
+</div>
+{% elif query %}
+<div class="empty" aria-live="polite">
+  <p class="empty-head">Nenhum resultado encontrado</p>
+  <p class="empty-freshness">{{ freshness_line }}</p>
+</div>
+{% endif %}

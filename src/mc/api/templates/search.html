@@ -1,0 +1,56 @@
+<!doctype html>
+{# Search page (Story 4.8). Works with JS disabled: the plain form GETs to
+   "/" and results render server-side below. With JS, htmx live-swaps the
+   /results partial as you type. #}
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Morning Crypto — arquivo</title>
+  <link rel="stylesheet" href="/static/css/pico.min.css">
+  <link rel="stylesheet" href="/static/css/mc.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/alpine.min.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <p class="over">acervo de transmissões — busca semântica</p>
+    <h1 class="wordmark">MORNING<span>/</span>CRYPTO</h1>
+    <p class="promise">encontre o momento exato em que foi dito.</p>
+  </header>
+
+  <form class="console" action="/" method="get" role="search">
+    <label class="visually-hidden" for="query">buscar no arquivo</label>
+    <input
+      id="query"
+      name="query"
+      type="search"
+      value="{{ query }}"
+      placeholder='experimente "bitcoin é bolha"'
+      autocomplete="off"
+      autofocus
+      hx-get="/results"
+      hx-trigger="input changed delay:300ms, search"
+      hx-target="#resultados"
+      hx-sync="this:replace"
+    >
+    <button type="submit">buscar</button>
+    <span class="htmx-indicator console-busy" aria-hidden="true">···</span>
+  </form>
+
+  <main id="resultados">
+    {% if query %}
+      {% include "results.html" %}
+    {% else %}
+      <div class="idle">
+        <p class="idle-hint">digite para buscar {{ stats }}</p>
+      </div>
+    {% endif %}
+  </main>
+
+  <footer class="colophon">
+    <p>{{ freshness_line }}</p>
+    <p class="colophon-note">as buscas rodam no servidor — nada é rastreado.</p>
+  </footer>
+</body>
+</html>
