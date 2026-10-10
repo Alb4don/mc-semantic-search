@@ -322,3 +322,43 @@ def test_run_update_defaults_to_config_ingest_db_path(tmp_path, monkeypatch):
         lock_path=tmp_path / "update.lock",
     )
     assert seen["path"] == config.INGEST_DB_PATH
+
+
+def test_staging_runs_before_processed_marker(tmp_path, monkeypatch):
+    """Review fix: staging (Mode B increment) must happen before the video is
+    marked processed — a crash between the two must leave the video
+    re-discoverable, and a staging failure must not ignore-list an
+    already-indexed video. Qdrant boundary is faked: this is pure ordering."""
+    state = StateStore(tmp_path / "ingest.db")
+    queue_dir = tmp_path / "queue"
+    processed_at_stage: list[bool] = []
+
+    def failing_stage(chunks, queue_dir):
+        processed_at_stage.append(state.is_processed("stage1"))
+        raise OSError("disk full while staging")
+
+    import mc.ingest.update as update_mod
+
+    monkeypatch.setattr(update_mod, "ensure_collection", lambda *a, **k: None)
+    monkeypatch.setattr(update_mod, "upsert_video", lambda *a, **k: None)
+    monkeypatch.setattr(update_mod, "_stage_for_push", failing_stage)
+
+    code = update_mod.run_update(
+        channels=("https://www.youtube.com/@test",),
+        state=state,
+        client=object(),
+        collection="fake",
+        discover=lambda channels: ["stage1"],
+        downloader=lambda vid: _segments(1, vid),
+        metadata_fetch=lambda ids: {},
+        lock_path=tmp_path / "update.lock",
+        transcripts_dir=tmp_path / "transcripts",
+        queue_dir=queue_dir,
+    )
+
+    assert code == 1
+    # staging ran BEFORE the processed marker → video stays re-discoverable
+    assert processed_at_stage == [False]
+    assert not state.is_processed("stage1")
+    # an indexed video must never be ignore-listed for a local staging error
+    assert not (tmp_path / "transcripts" / "ignored_videos.txt").exists()

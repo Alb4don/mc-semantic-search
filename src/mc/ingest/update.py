@@ -62,6 +62,14 @@ def is_auth_failure(reason: str) -> bool:
     return any(marker in lowered for marker in _AUTH_MARKERS)
 
 
+class StagingError(RuntimeError):
+    """Local failure writing the Mode B increment after a successful upsert.
+
+    Never ignore-listed: the video is already indexed, so the next run must
+    retry the whole ingest (push/apply dedupe by content hash).
+    """
+
+
 def run_update(
     *,
     dry_run: bool = False,
@@ -120,6 +128,15 @@ def run_update(
                     )
                     failures.append((video_id, f"auth: {reason}"))
                     continue
+                if isinstance(exc, StagingError):
+                    logger.error(
+                        "staging failure for %s (%s) — indexed but increment "
+                        "not staged; will be retried next run",
+                        video_id,
+                        reason,
+                    )
+                    failures.append((video_id, f"staging: {reason}"))
+                    continue
                 logger.exception("video %s failed", video_id)
                 failures.append((video_id, reason))
                 add_to_ignore_list(
@@ -150,7 +167,7 @@ def _ingest_one(
     state: StateStore,
     queue_dir: Path,
 ) -> None:
-    """Download → chunk → upsert → mark processed for ONE video."""
+    """Download → chunk → upsert → stage → mark processed for ONE video."""
     segments = downloader(video_id)
     if segments is None:
         raise LookupError("no subtitles available in any supported language")
@@ -166,8 +183,14 @@ def _ingest_one(
         for chunk in chunk_segments(segments, video_id)
     ]
     upsert_video(client, collection, video_id, chunks)
+    try:
+        _stage_for_push(chunks, queue_dir)
+    except Exception as exc:
+        raise StagingError(str(exc) or type(exc).__name__) from exc
+    # Mark only after the Mode B increment is durable (review fix): a crash
+    # before this line leaves the video re-discoverable, and push/apply
+    # dedupe by content hash so a re-staged duplicate is a no-op.
     state.mark_processed(video_id, "update")
-    _stage_for_push(chunks, queue_dir)
 
 
 def _stage_for_push(chunks, queue_dir: Path) -> None:
