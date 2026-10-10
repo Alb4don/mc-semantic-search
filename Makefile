@@ -1,4 +1,4 @@
-.PHONY: up down build test lint dev
+.PHONY: up down build test lint dev hooks
 
 up:       ## start qdrant + api (local ≈ production)
 	docker compose up -d --build
@@ -14,6 +14,9 @@ test:     ## pytest + BDD (unit; set MC_COMPOSE_TESTS=1 for compose smoke)
 
 lint:
 	.venv/bin/python -m ruff check .
+
+hooks:    ## wire .githooks (NFR-5 credential guard) as the git hooks dir
+	git config core.hooksPath .githooks
 
 dev:      ## run the API from the local venv
 	.venv/bin/uvicorn mc.api.app:app --host 0.0.0.0 --port 8080

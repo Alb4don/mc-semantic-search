@@ -17,6 +17,11 @@ from mc.search.query import normalize
 _SENTENCE_RE = re.compile(r"[.!?]+")
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
 
+# CPU guard: the per-result highlight regex is an alternation of every
+# distinct query word (× up to 50 results/request) — cap the word list so a
+# pathological query can't amplify regex work.
+MAX_HIGHLIGHT_WORDS = 32
+
 
 @dataclass(frozen=True)
 class Snippet:
@@ -29,7 +34,7 @@ def _words(text: str) -> list[str]:
 
 
 def build_snippet(text: str, query: str, *, max_len: int = 280) -> Snippet:
-    qwords = set(_words(query))
+    qwords = set(_words(query)[:MAX_HIGHLIGHT_WORDS])
     sentences = [s.strip() for s in _SENTENCE_RE.split(text) if s.strip()]
     if not sentences:
         return Snippet(highlighted=html.escape(text[:max_len]), has_literal=False)

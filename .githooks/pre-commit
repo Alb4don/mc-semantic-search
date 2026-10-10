@@ -1,13 +1,26 @@
 #!/usr/bin/env bash
 # NFR-5 guard: the YouTube cookies file is a live credential.
-# It must never be committed — not even accidentally renamed copies.
+# It must never be committed — not even accidentally renamed copies
+# or pasted lines. (Hooks are wired via `make hooks` → core.hooksPath.)
 set -euo pipefail
 
-PATTERN='www\.youtube\.com_cookies'
-
-if git diff --cached --name-only | grep -qiE "$PATTERN"; then
-    echo "ERROR: commit rejected — a file matching '$PATTERN' is staged." >&2
-    echo "YouTube cookies are live credentials (NFR-5). Unstage it:" >&2
+fail() {
+    echo "ERROR: commit rejected — staged YouTube cookies detected." >&2
+    echo "Cookie files/lines are live credentials (NFR-5). Unstage them:" >&2
     echo "  git restore --staged <file>" >&2
     exit 1
+}
+
+# (1) filename check: any staged path containing "cookies" (case-insensitive)
+#     — catches copies/renames of www.youtube.com_cookies.txt too.
+if git diff --cached --name-only | grep -i cookies > /dev/null; then
+    fail
+fi
+
+# (2) content check: renamed-away filenames or pasted lines must not smuggle
+#     a Netscape cookie jar in. Flag an added line that carries youtube.com
+#     plus a tab separator (cookie body) or the jar's header line.
+TAB=$'\t'
+if git diff --cached -U0 | grep -E '^[+].*youtube\.com.*'"$TAB"'|^[+][[:space:]]*#[[:space:]]*Netscape HTTP Cookie File' > /dev/null; then
+    fail
 fi

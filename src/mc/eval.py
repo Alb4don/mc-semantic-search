@@ -18,6 +18,7 @@ from qdrant_client import QdrantClient, models
 
 from mc.config import COLLECTION_NAME, QDRANT_URL
 from mc.embeddings import embed_sparse
+from mc.qdrant import client_kwargs
 from mc.search.engine import SearchResult
 from mc.search.engine import search as hybrid_search
 from mc.search.query import parse_query
@@ -132,7 +133,7 @@ def run_eval(
     hybrid_fn: SearchFn | None = None,
 ) -> EvalReport:
     """Score both modes per case; MRR over reciprocal ranks (misses = 0)."""
-    client = client or QdrantClient(url=QDRANT_URL, timeout=60)
+    client = client or QdrantClient(url=QDRANT_URL, **client_kwargs(timeout=60))
     sparse_fn = sparse_fn or (
         lambda cl, q, **kw: sparse_only_search(cl, q, collection=collection, **kw)
     )

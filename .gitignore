@@ -15,6 +15,9 @@ cookies*
 www.youtube.com_cookies*
 !docs/tasks/cookies.md
 
+# Local env file: docker compose auto-loads it; may hold secrets
+.env
+
 # Python
 __pycache__/
 *.pyc
@@ -28,6 +31,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 .coverage
+*.swp
 
 # Meta cache (Story 2.2) and ignore lists hold derived data
 data/meta/

@@ -53,3 +53,12 @@ def test_literal_flag_false_without_exact_phrase():
     snip = build_snippet(TEXT, "criptoele fantasma palavra")
     # semantic-only: has_literal must be False
     assert snip.has_literal is False
+
+
+def test_highlight_words_capped_at_32():
+    """CPU guard: only the first 32 query words feed the highlight regex."""
+    query = " ".join(f"w{i:02d}" for i in range(64))
+    snip = build_snippet("w00 e w63 aparecem aqui. segunda frase w01.", query)
+    assert "<mark>w00</mark>" in snip.highlighted  # within the cap
+    assert "<mark>w63</mark>" not in snip.highlighted  # beyond the 32-word cap
+    assert snip.has_literal is False

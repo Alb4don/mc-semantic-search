@@ -18,7 +18,7 @@ from qdrant_client import QdrantClient
 from mc.config import COLLECTION_NAME, INGEST_DB_PATH, QDRANT_URL
 from mc.ingest.legacy import count_legacy, iter_legacy_chunks
 from mc.ingest.lock import RunLock
-from mc.qdrant import ensure_collection, upsert_video
+from mc.qdrant import client_kwargs, ensure_collection, upsert_video
 from mc.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def run_backfill(
     processed this run.
     """
     if client is None:
-        client = QdrantClient(url=QDRANT_URL, timeout=60)
+        client = QdrantClient(url=QDRANT_URL, **client_kwargs(timeout=60))
     if state is None:
         state = StateStore(INGEST_DB_PATH)
 

@@ -32,5 +32,13 @@ COPY src/mc/ /app/src/mc/
 
 RUN python /app/src/mc/bake_models.py
 
+# Non-root runtime (uid 1000): host bind mounts (./data, ./state, ./snapshots)
+# must be owned by this uid on the server. Models are chowned so the app can
+# read them; /opt/venv stays root-owned (read-only at runtime is a plus).
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --create-home app \
+    && chown -R app:app /app /models
+USER app
+
 EXPOSE 8080
 CMD ["uvicorn", "mc.api.app:app", "--host", "0.0.0.0", "--port", "8080"]

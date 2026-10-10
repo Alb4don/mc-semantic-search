@@ -6,12 +6,15 @@ logic lives in `health_snapshot` so it can be unit-tested without HTTP.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from qdrant_client import QdrantClient
 
 from mc.qdrant import read_meta_fingerprint
 from mc.state import StateStore
+
+logger = logging.getLogger(__name__)
 
 LAST_SUCCESS_KEY = "update"  # run_type recorded by the ingest update flow
 
@@ -40,7 +43,9 @@ def health_snapshot(
     try:
         client.get_collections()
     except Exception as exc:  # any transport error → qdrant is down
-        return 503, {"status": "unreachable", "detail": str(exc)}
+        # str(exc) would disclose internal qdrant host/URLs to callers.
+        logger.warning("qdrant unreachable: %s", exc)
+        return 503, {"status": "unreachable"}
 
     last_update = state.last_success(LAST_SUCCESS_KEY)
     age_hours = _hours_since(last_update)

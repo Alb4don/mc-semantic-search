@@ -73,6 +73,8 @@ def test_language_priority_list_and_per_attempt_options(tmp_path):
         assert ydl_opts["writesubtitles"] is True
         assert ydl_opts["writeautomaticsub"] is True
         assert ydl_opts["skip_download"] is True
+        # Failures must raise into the classification path, never be swallowed.
+        assert ydl_opts["ignoreerrors"] is False
 
 
 def test_cached_srt_short_circuits(tmp_path):
@@ -149,6 +151,59 @@ def test_ignore_list_helpers(tmp_path):
     assert is_ignored(VIDEO_ID, ignore_file) is True
     # Reason suffix does not confuse the id match.
     assert not is_ignored(f"{VIDEO_ID}x", ignore_file)
+
+
+def test_non_rate_limit_failure_propagates_not_ignored(tmp_path):
+    """With ignoreerrors=False a real download failure must raise (so run_update
+    can classify it, e.g. stale cookies) instead of masquerading as
+    "no subtitles" and silently landing on the ignore list."""
+    rec = Recorder(
+        behavior=lambda *_: (_ for _ in ()).throw(
+            RuntimeError("Sign in to confirm you're not a bot")
+        )
+    )
+    transcripts_dir = tmp_path / "transcripts"
+
+    with pytest.raises(RuntimeError, match="Sign in"):
+        download_transcript(
+            VIDEO_ID,
+            cookies_path=_write_cookies(tmp_path),
+            transcripts_dir=transcripts_dir,
+            runner=rec,
+        )
+
+    assert rec.call_count == 1  # first failure aborts — no language retries
+    assert not (transcripts_dir / "ignored_videos.txt").exists()
+
+
+def test_ignore_list_newlines_collapsed(tmp_path):
+    """Embedded newlines in id/reason must not forge extra ignore-list lines."""
+    ignore_file = tmp_path / "ignored_videos.txt"
+
+    add_to_ignore_list(f"{VIDEO_ID}\ninjected", ignore_file, "boom\r\nfake-entry")
+
+    lines = ignore_file.read_text(encoding="utf-8").splitlines()
+    assert lines == [f"{VIDEO_ID} injected # boom fake-entry"]
+    assert is_ignored(VIDEO_ID, ignore_file) is True
+
+
+def test_group_readable_cookies_are_tightened_to_0600(tmp_path, caplog):
+    import logging
+
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    cookies.chmod(0o644)
+
+    with caplog.at_level(logging.WARNING, logger="mc.ingest.download"):
+        download_transcript(
+            VIDEO_ID,
+            cookies_path=str(cookies),
+            transcripts_dir=tmp_path / "transcripts",
+            runner=Recorder(),
+        )
+
+    assert cookies.stat().st_mode & 0o777 == 0o600
+    assert any("0600" in r.message for r in caplog.records)
 
 
 def test_parse_json3_golden():

@@ -32,6 +32,9 @@ COLLECTION_NAME = "mc-transcripts-v1"
 
 # --- Qdrant ---
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
+# Optional API-key auth (defense in depth; OFF by default). Pair with the
+# server-side QDRANT__SERVICE__API_KEY — see docker-compose.yml.
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
 
 # --- API ---
 API_PORT = int(os.environ.get("API_PORT", "8080"))

@@ -26,6 +26,7 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 
 from mc.config import COLLECTION_NAME, QDRANT_URL, SNAPSHOTS_DIR
+from mc.qdrant import client_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ DEFAULT_KEEP = 7
 
 def default_client(url: str | None = None) -> QdrantClient:
     """Client for the configured qdrant (``config.QDRANT_URL``)."""
-    return QdrantClient(url=url or QDRANT_URL, timeout=120)
+    return QdrantClient(url=url or QDRANT_URL, **client_kwargs(timeout=120))
 
 
 def snapshot_dir(collection: str, snapshots_path: Path | None = None) -> Path:
@@ -133,15 +134,21 @@ def restore(
 ) -> None:
     """Recover `target_collection` from a snapshot file (Story 5.3 drill).
 
-    The target must NOT already exist. The snapshot file is read by the
-    qdrant server itself, so it must be inside the container's snapshots
-    volume; the recover call uses a ``file://`` URL there.
+    The target must NOT already exist (enforced below — a silent overwrite
+    of the live collection is exactly what this must prevent). The snapshot
+    file is read by the qdrant server itself, so it must be inside the
+    container's snapshots volume; the recover call uses a ``file://`` URL there.
     """
     path = Path(snapshot_path)
     if not path.is_file():
         raise FileNotFoundError(f"snapshot file not found: {path}")
     location = _container_location(path, snapshots_path, container_snapshots_dir)
     client = client or default_client()
+    if client.collection_exists(target_collection):
+        raise ValueError(
+            f"target collection {target_collection!r} already exists — restore "
+            "never overwrites an existing collection (drop it or pick a new --to)"
+        )
     logger.info("recovering %s from %s", target_collection, location)
     ok = client.recover_snapshot(
         collection_name=target_collection, location=location, wait=True
@@ -174,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     p_restore.add_argument(
         "--to",
         dest="target",
-        default=COLLECTION_NAME,
+        required=True,
         help="target collection name (must not exist)",
     )
     p_restore.add_argument("--snapshots-dir", type=Path, default=None)

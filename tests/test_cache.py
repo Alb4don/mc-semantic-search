@@ -98,3 +98,28 @@ def test_engine_search_consults_cache(monkeypatch, tmp_path):
     search(StubClient(), "bitcoin preço", collection="x", cache=cache)
     search(StubClient(), "bitcoin preço", collection="x", cache=cache)
     assert len(calls) == 1, "second identical query must be served from cache"
+
+
+def test_transient_freshness_read_error_keeps_cache(tmp_path, monkeypatch):
+    """A failed freshness read must keep the previous value — not clear the
+    cached embeddings (only genuinely advanced freshness invalidates)."""
+    import mc.state as state_mod
+    from mc.state import StateStore
+
+    state = StateStore(tmp_path / "ingest.db")
+    embedder, calls = _spy_embedder()
+    cache = ResultCache(embedder, tmp_path / "ingest.db", size=8)
+
+    cache.get("bitcoin")
+    state.record_success("update")  # freshness advanced → normal invalidation
+    cache.get("bitcoin")
+    assert len(calls) == 2
+
+    class BrokenStore:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("transient read failure")
+
+    monkeypatch.setattr(state_mod, "StateStore", BrokenStore)
+    cache.get("bitcoin")  # freshness read fails → cache is served, not cleared
+    cache.get("bitcoin")
+    assert len(calls) == 2, "failed freshness read must not clear the cache"

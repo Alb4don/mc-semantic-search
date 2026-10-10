@@ -217,3 +217,75 @@ def test_verbatim_query_applies_quote_boost_via_api(tmp_path, monkeypatch):
     assert body["results"][0]["episode"] == "1"  # literal chunk first
     assert len(body["results"]) == 2  # never dropped
     assert scores[1] == 0.75  # 1.5 * factor 0.5 — paraphrase demoted
+
+
+def test_oversized_query_rejected_on_all_routes(tmp_path, monkeypatch):
+    """P1 DoS guard: queries longer than 512 chars never reach the engine."""
+    from mc.api import app as app_module
+
+    monkeypatch.setattr(app_module, "run_search", lambda *args, **kwargs: [])
+    state = StateStore(tmp_path / "ingest.db")
+    client = TestClient(app_module.create_app(client=object(), state=state))
+    for route in ("/search", "/results", "/"):
+        assert client.get(route, params={"query": "a" * 513}).status_code == 422
+        assert client.get(route, params={"query": "a" * 512}).status_code == 200
+
+
+def test_poisoned_url_and_video_id_are_sanitized(tmp_path, monkeypatch):
+    """P2 stored-XSS defense: only https:// urls and strict video ids survive
+    a poisoned-index payload; start_seconds is clamped non-negative."""
+    from mc.api import app as app_module
+    from mc.search.engine import SearchResult
+
+    poisoned = SearchResult(
+        video_id="javascript:alert(1)",
+        text="o mercado reagiu forte hoje",
+        url="javascript:alert(1)",
+        start_seconds=-5,
+        date=None,
+        episode=None,
+        channel="mc",
+        score=1.0,
+    )
+    valid = SearchResult(
+        video_id="video000001",
+        text="o mercado reagiu forte hoje",
+        url="javascript:alert(1)",
+        start_seconds=30,
+        date=None,
+        episode="2",
+        channel="mc",
+        score=1.0,
+    )
+    monkeypatch.setattr(
+        app_module, "run_search", lambda *args, **kwargs: [poisoned, valid]
+    )
+    state = StateStore(tmp_path / "ingest.db")
+    client = TestClient(app_module.create_app(client=object(), state=state))
+
+    body = client.get("/search", params={"query": "mercado"}).json()
+    assert body["results"][0]["url"] == ""  # javascript: scheme dropped
+    assert body["results"][0]["start_seconds"] == 0  # clamped non-negative
+    # valid id + broken url → canonical fallback built from the id
+    assert body["results"][1]["url"] == "https://www.youtube.com/watch?v=video000001"
+
+    html = client.get("/results", params={"query": "mercado"}).text
+    assert "javascript:" not in html  # never reaches an href/src
+    assert "youtube-nocookie.com/embed/video000001" in html  # valid id renders
+    # the poisoned id fails the strict pattern → no iframe rendered at all
+    assert "youtube-nocookie.com/embed/javascript" not in html
+
+
+def test_security_headers_on_every_response(tmp_path):
+    """P3: baseline security headers are set on all responses (even errors)."""
+    from mc.api import app as app_module
+
+    state = StateStore(tmp_path / "ingest.db")
+    client = TestClient(app_module.create_app(client=object(), state=state))
+    response = client.get("/health")  # 503 path — headers must still be set
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    csp = response.headers["Content-Security-Policy"]
+    assert "default-src 'self'" in csp
+    assert "frame-src https://www.youtube-nocookie.com" in csp

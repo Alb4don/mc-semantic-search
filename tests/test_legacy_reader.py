@@ -59,6 +59,24 @@ def test_no_quarantine_path_still_works():
     assert len(chunks) == 4
 
 
+def test_quarantine_csv_defuses_formula_cells(tmp_path: Path):
+    """A cell starting with =/+/-/@ must be quote-prefixed so opening the CSV
+    in Excel/LibreOffice does not execute it as a formula."""
+    from mc.ingest.legacy import _append_quarantine
+
+    path = tmp_path / "quarantine.csv"
+    _append_quarantine("=1+1", None, "no_video_id", path)
+    _append_quarantine(
+        "https://x/watch?v=-dashid", "-dashid", "unparseable_timestamp", path
+    )
+    _append_quarantine(URL_BROKEN, None, "no_video_id", path)
+
+    rows = list(csv.reader(path.read_text().splitlines()))
+    assert rows[1] == ["'=1+1", "no_video_id"]
+    assert rows[2] == ["'-dashid", "unparseable_timestamp"]
+    assert rows[3] == [URL_BROKEN, "no_video_id"]  # benign cell untouched
+
+
 def test_count_legacy_mini_fixture():
     counts = count_legacy(FIXTURE)
     assert counts["total_rows"] == 5

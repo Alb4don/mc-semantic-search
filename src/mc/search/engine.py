@@ -8,7 +8,7 @@ list of results. Boosting lives in ranking.py; the optional ResultCache
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from qdrant_client import QdrantClient, models
 
@@ -51,6 +51,10 @@ def search(
     query = parse_query(query_raw)
     if not query.normalized:
         return []
+    # Defense in depth: direct callers (eval.py) bypass the API-layer
+    # Query(max_length=512)/limit constraints — clamp both here.
+    query = replace(query, normalized=query.normalized[:512])
+    limit = min(max(limit, 1), 100)
 
     # NFR-1: both embedder calls inside a max_workers=1 executor.
     with ThreadPoolExecutor(max_workers=EMBED_EXECUTOR_WORKERS) as pool:

@@ -8,6 +8,7 @@ app against local qdrant, unreachable clients or tmp state stores.
 
 from __future__ import annotations
 
+import re
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -25,6 +26,7 @@ from mc.config import (
     INGEST_DB_PATH,
     QDRANT_URL,
 )
+from mc.qdrant import client_kwargs
 from mc.search import engine as search_engine
 from mc.search.cache import ResultCache
 from mc.search.engine import SearchResult
@@ -37,6 +39,14 @@ from mc.state import StateStore
 # Story 4.5: one request fetches at most 50 hits — bigger client limits are
 # clamped (never rejected) so no caller can demand the whole archive.
 MAX_SEARCH_LIMIT = 50
+
+# DoS guard: query length is capped at the API edge (and clamped again in
+# the engine) so oversized inputs can't occupy the embedder's global lock.
+MAX_QUERY_LENGTH = 512
+
+# Stored-XSS defense (poisoned-index payloads): YouTube ids are strictly
+# alphanumeric+dash/underscore; anything else is never rendered/linked.
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 
 TEMPLATES = Jinja2Templates(
     directory=Path(__file__).parent / "templates", autoescape=True
@@ -59,17 +69,36 @@ def _freshness_line(last_update: str | None) -> str:
     return f"acervo atualizado até {date}"
 
 
+def _safe_url(url: str | None, video_id: str | None) -> str:
+    """Only https:// URLs survive a poisoned-index payload (stored XSS)."""
+    if url and url.startswith("https://"):
+        return url
+    if video_id and _VIDEO_ID_RE.fullmatch(video_id):
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return ""
+
+
 def _video_result(result: SearchResult, query: str) -> dict:
+    video_id = (
+        result.video_id
+        if result.video_id and _VIDEO_ID_RE.fullmatch(result.video_id)
+        else None
+    )
+    try:
+        start_seconds = max(int(result.start_seconds or 0), 0)
+    except (TypeError, ValueError):
+        # Poisoned payload with a non-numeric start must not 500 the page.
+        start_seconds = 0
     return {
-        "title": result.episode or f"vídeo {result.video_id}",
+        "title": result.episode or f"vídeo {video_id}",
         "episode": result.episode,
         "date": result.date,
         "channel": result.channel,
         "snippet": build_snippet(result.text or "", query).highlighted,
-        "url": result.url,
-        "video_id": result.video_id,
-        "start_seconds": result.start_seconds,
-        "tape": _tape(result.start_seconds),
+        "url": _safe_url(result.url, result.video_id),
+        "video_id": video_id,
+        "start_seconds": start_seconds,
+        "tape": _tape(start_seconds),
         "score": result.score,
     }
 
@@ -85,7 +114,9 @@ def create_app(
     state: StateStore | None = None,
     cache: object | None = None,
 ) -> FastAPI:
-    qdrant = client if client is not None else QdrantClient(url=qdrant_url)
+    qdrant = (
+        client if client is not None else QdrantClient(url=qdrant_url, **client_kwargs())
+    )
     # StateStore holds a thread-bound sqlite connection: keep only the path and
     # open a short-lived store per request (same pattern as ResultCache).
     _state_db = Path(state.path) if state is not None else Path(state_path)
@@ -99,6 +130,22 @@ def create_app(
             store.close()
 
     app = FastAPI(title="mc-semantic-search", version="0.1.0")
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        # 'unsafe-inline' in style/script is required: htmx/Alpine inject
+        # inline attributes; frame-src pins the embedded player host.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; frame-src https://www.youtube-nocookie.com; "
+            "img-src 'self' https://i.ytimg.com; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
     app.mount(
         "/static",
         StaticFiles(directory=Path(__file__).parent / "static"),
@@ -136,7 +183,7 @@ def create_app(
 
     @app.get("/search")
     def search_endpoint(
-        query: str = Query(min_length=1),
+        query: str = Query(min_length=1, max_length=MAX_QUERY_LENGTH),
         limit: int = Query(default=10, ge=1),
     ) -> dict:
         effective_limit = min(limit, MAX_SEARCH_LIMIT)
@@ -166,7 +213,9 @@ def create_app(
         }
 
     @app.get("/results", response_class=HTMLResponse)
-    def results_partial(query: str = Query(default="")) -> str:
+    def results_partial(
+        query: str = Query(default="", max_length=MAX_QUERY_LENGTH)
+    ) -> str:
         results = _video_results(query, MAX_SEARCH_LIMIT) if query.strip() else []
         return TEMPLATES.get_template("results.html").render(
             results=results,
@@ -176,7 +225,8 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse)
     def search_page(
-        request: Request, query: str = Query(default="")
+        request: Request,
+        query: str = Query(default="", max_length=MAX_QUERY_LENGTH),
     ) -> HTMLResponse:
         stripped = query.strip()
         results = _video_results(query, MAX_SEARCH_LIMIT) if stripped else []

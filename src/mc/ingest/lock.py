@@ -28,7 +28,8 @@ class RunLock:
     def acquire(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._break_stale()
-        self._fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
+        # O_NOFOLLOW: a symlink planted at the lock path must not be followed.
+        self._fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o644)
         try:
             fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

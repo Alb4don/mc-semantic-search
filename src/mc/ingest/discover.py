@@ -9,9 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 
 logger = logging.getLogger(__name__)
+
+#: Only sane YouTube-ish ids become path components / URL fragments.
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+_YTDLP_TIMEOUT_S = 120
 
 
 class DiscoveryError(RuntimeError):
@@ -46,7 +52,14 @@ def _run_ytdlp(channel_url: str) -> subprocess.CompletedProcess:
         "50",
         channel_url,
     ]
-    return subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, timeout=_YTDLP_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DiscoveryError(
+            f"yt-dlp timed out after {_YTDLP_TIMEOUT_S}s for {channel_url}"
+        ) from exc
 
 
 def list_channel_videos(channels: tuple[str, ...] | list[str]) -> set[str]:
@@ -75,6 +88,16 @@ def list_channel_videos(channels: tuple[str, ...] | list[str]) -> set[str]:
                 raise DiscoveryError(
                     f"malformed playlist entry for {channel}: {entry!r}"
                 )
-            videos.add(entry["id"])
+            video_id = str(entry["id"])
+            if not _VIDEO_ID_RE.fullmatch(video_id):
+                # Non-YouTube extractors / malformed entries must never reach
+                # f"{video_id}.srt" path building (traversal via '/' or '..').
+                logger.warning(
+                    "skipping entry with invalid video id for %s: %r",
+                    channel,
+                    video_id,
+                )
+                continue
+            videos.add(video_id)
         logger.info("channel %s: %d videos", channel, len(entries))
     return videos

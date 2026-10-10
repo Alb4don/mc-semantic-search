@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -82,4 +83,38 @@ def test_malformed_entries_clear_error(monkeypatch):
 def test_ytdlp_failure_raises(monkeypatch):
     monkeypatch.setattr("mc.ingest.discover._run_ytdlp", _fake_run(1, "", "boom"))
     with pytest.raises(DiscoveryError, match="boom"):
+        list_channel_videos(["https://www.youtube.com/@x"])
+
+
+def test_invalid_video_ids_skipped_with_warning(monkeypatch, caplog):
+    """Video ids become path components (f"{id}.srt") — traversal-shaped ids
+    must be skipped and logged, never propagated into the pipeline."""
+    import logging
+
+    stdout = json.dumps(
+        {
+            "entries": [
+                {"id": "../evil"},
+                {"id": "a/b"},
+                {"id": "has space"},
+                {"id": "a" * 65},  # over the 64-char cap
+                {"id": "still_valid-1"},
+                {"id": "b" * 64},  # exactly at the cap is fine
+            ]
+        }
+    )
+    monkeypatch.setattr("mc.ingest.discover._run_ytdlp", _fake_run(0, stdout, ""))
+    with caplog.at_level(logging.WARNING, logger="mc.ingest.discover"):
+        ids = list_channel_videos(["https://www.youtube.com/@x"])
+
+    assert ids == {"still_valid-1", "b" * 64}
+    assert sum("invalid video id" in r.message for r in caplog.records) == 4
+
+
+def test_ytdlp_timeout_raises_discovery_error(monkeypatch):
+    def run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, timeout=120)
+
+    monkeypatch.setattr("mc.ingest.discover.subprocess.run", run)
+    with pytest.raises(DiscoveryError, match="timed out"):
         list_channel_videos(["https://www.youtube.com/@x"])

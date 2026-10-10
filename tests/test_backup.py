@@ -126,6 +126,20 @@ def test_restore_into_fresh_collection_is_searchable(qdrant, seeded):
         qdrant.delete_collection(target)
 
 
+def test_restore_refuses_existing_target(qdrant, seeded):
+    """The documented contract is enforced: an existing target is an error,
+    never a silent rollback of the live collection."""
+    name, _ = seeded
+    snap = create_snapshot(client=qdrant, collection=name, keep=None)
+
+    with pytest.raises(ValueError, match="already exists"):
+        restore(snap, name, client=qdrant)
+
+    # the refused restore must have left the live collection intact
+    count = qdrant.count(collection_name=name, exact=True)
+    assert count.count == 4  # 3 chunk points + meta point
+
+
 def test_rotation_keeps_last_seven(qdrant, seeded, tmp_path):
     for i in range(9):
         f = tmp_path / f"snap-{i:02d}.snapshot"

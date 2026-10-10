@@ -61,8 +61,11 @@ def test_pre_commit_hook_rejects_cookie_files(tmp_path):
     assert hook.exists(), ".githooks/pre-commit must exist (core.hooksPath)"
     assert hook.stat().st_mode & 0o111, "pre-commit hook must be executable"
     hook_text = hook.read_text().replace("\\", "")
-    assert "www.youtube.com_cookies" in hook_text, (
-        "hook must guard the cookie filename pattern"
+    assert "cookies" in hook_text.lower(), (
+        "hook must guard any staged path containing 'cookies' (case-insensitive)"
+    )
+    assert "git diff --cached" in hook_text, (
+        "hook must scan staged content for pasted cookie lines"
     )
 
     # Behavioural check: in a throwaway clone, staging a cookie file must be
@@ -100,31 +103,63 @@ def test_pre_commit_hook_rejects_cookie_files(tmp_path):
         ],
         check=True,
     )
+
+    def try_commit() -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [
+                "git",
+                "-C",
+                str(tmp_path),
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-m",
+                "leak cookies",
+            ],
+            capture_output=True,
+            text=True,
+            env={
+                "PATH": "/usr/bin:/bin:/usr/local/bin",
+                "GIT_CONFIG_GLOBAL": "/dev/null",
+                "GIT_CONFIG_SYSTEM": "/dev/null",
+            },
+        )
+
+    def unstage(name: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), "restore", "--staged", name], check=True)
+
+    # (a) the canonical cookie filename is rejected
     probe = tmp_path / "www.youtube.com_cookies.txt"
     probe.write_text("# Netscape HTTP Cookie File\n")
     subprocess.run(["git", "-C", str(tmp_path), "add", "www.youtube.com_cookies.txt"], check=True)
-    result = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(tmp_path),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-m",
-            "leak cookies",
-        ],
-        capture_output=True,
-        text=True,
-        env={
-            "PATH": "/usr/bin:/bin:/usr/local/bin",
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_CONFIG_SYSTEM": "/dev/null",
-        },
-    )
+    result = try_commit()
     assert result.returncode != 0, "hook must reject cookie files"
+    assert "cookie" in (result.stdout + result.stderr).lower()
+    unstage("www.youtube.com_cookies.txt")
+
+    # (b) a renamed copy (no youtube marker in the name) is rejected too
+    renamed = tmp_path / "baked-cookies.txt"
+    renamed.write_text("# Netscape HTTP Cookie File\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "baked-cookies.txt"], check=True)
+    result = try_commit()
+    assert result.returncode != 0, "hook must reject renamed cookie files"
+    assert "cookie" in (result.stdout + result.stderr).lower()
+    unstage("baked-cookies.txt")
+
+    # (c) pasted cookie CONTENT in an innocently-named file is rejected too
+    # (the line is assembled at runtime so committing this test never trips
+    # the hook's own content scan)
+    tab = "\t"
+    pasted = tmp_path / "notes.txt"
+    pasted.write_text(
+        "# Netscape HTTP Cookie File\n"
+        f".youtube.com{tab}TRUE\t/\tTRUE\t0\tSID\tleaked-token\n"
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "add", "notes.txt"], check=True)
+    result = try_commit()
+    assert result.returncode != 0, "hook must reject pasted Netscape cookie lines"
     assert "cookie" in (result.stdout + result.stderr).lower()
 
 

@@ -12,7 +12,7 @@ import uuid
 
 from qdrant_client import QdrantClient, models
 
-from mc.config import DENSE_DIM
+from mc.config import DENSE_DIM, QDRANT_API_KEY
 from mc.embeddings import embed_passage, embed_sparse, model_fingerprint, sparse_fingerprint
 from mc.ingest.models import Chunk
 
@@ -27,6 +27,20 @@ DATETIME_INDEX_FIELDS = ["date"]
 
 class ModelMismatchError(RuntimeError):
     """Raised when the collection fingerprint doesn't match the loaded models."""
+
+
+def client_kwargs(*, timeout: float | None = None) -> dict:
+    """Shared QdrantClient kwargs: api_key attached when configured.
+
+    Defense in depth for an auth-enabled qdrant server — config.QDRANT_API_KEY
+    is OFF by default; pair it with QDRANT__SERVICE__API_KEY server-side
+    (see docker-compose.yml). New QdrantClient(...) call sites should spread
+    these kwargs.
+    """
+    kwargs: dict = {"timeout": timeout} if timeout is not None else {}
+    if QDRANT_API_KEY:
+        kwargs["api_key"] = QDRANT_API_KEY
+    return kwargs
 
 
 def ensure_collection(client: QdrantClient, name: str, *, force: bool = False) -> None:

@@ -23,7 +23,7 @@ from qdrant_client import QdrantClient
 from mc import config
 from mc.ingest.lock import RunLock
 from mc.ingest.models import Chunk
-from mc.qdrant import upsert_video
+from mc.qdrant import client_kwargs, upsert_video
 from mc.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ _APPLIED_PREFIX = "applied:"
 _PENDING_NAME = "pending.jsonl"  # `mc update`'s staging file — never an increment
 _FAILED_DIR = "failed"
 _LOCK_NAME = "update.lock"  # shared with `mc update`/`mc push` so they never overlap
+_MAX_TEXT_CHARS = 50_000  # a 30-segment chunk is ~2k chars; anything above is hostile
+_MAX_FILE_BYTES = 100 * 1024 * 1024  # refuse to load larger increments into memory
 
 
 def _content_hash(record: dict) -> str:
@@ -51,6 +53,12 @@ def _queue_files(queue_dir: Path) -> list[Path]:
 
 def _parse_file(path: Path) -> list[dict]:
     """Parse one increment file; raise ValueError on the first malformed line."""
+    size = path.stat().st_size
+    if size > _MAX_FILE_BYTES:
+        raise ValueError(
+            f"file of {size} bytes exceeds the {_MAX_FILE_BYTES}-byte cap — "
+            "not loading into memory"
+        )
     records: list[dict] = []
     for lineno, raw in enumerate(
         path.read_text(encoding="utf-8").splitlines(), start=1
@@ -73,10 +81,12 @@ def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
     grouped: dict[str, list[Chunk]] = {}
     for record in records:
         try:
+            url = record["url"]
+            text = record["text"]
             chunk = Chunk(
                 video_id=str(record["video_id"]),
-                text=record["text"],
-                url=record["url"],
+                text=text,
+                url=url,
                 start_seconds=int(record["start_seconds"]),
                 date=record.get("date"),
                 episode=record.get("episode"),
@@ -84,6 +94,22 @@ def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"malformed record {record!r}: {exc}") from None
+        # Producer emits YouTube watch URLs; anything else (or a missing/
+        # oversized/empty text) is untrusted queue input — fail the file.
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"record for {chunk.video_id!r}: url must be an http(s) URL, "
+                f"got {url!r}"
+            )
+        if not isinstance(text, str) or not text:
+            raise ValueError(
+                f"record for {chunk.video_id!r}: text must be a non-empty string"
+            )
+        if len(text) > _MAX_TEXT_CHARS:
+            raise ValueError(
+                f"record for {chunk.video_id!r}: text exceeds "
+                f"{_MAX_TEXT_CHARS} chars"
+            )
         grouped.setdefault(chunk.video_id, []).append(chunk)
     return grouped
 
@@ -111,7 +137,7 @@ def run_apply(
     elif not isinstance(state, StateStore):
         state = StateStore(Path(state))
     if client is None:
-        client = QdrantClient(url=config.QDRANT_URL, timeout=30)
+        client = QdrantClient(url=config.QDRANT_URL, **client_kwargs(timeout=30))
     lock_path = (
         Path(lock_path) if lock_path is not None else queue_dir.parent / _LOCK_NAME
     )

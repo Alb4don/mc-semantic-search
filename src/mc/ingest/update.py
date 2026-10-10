@@ -34,7 +34,7 @@ from mc.ingest.download import (
 )
 from mc.ingest.lock import RunLock
 from mc.ingest.metadata import enrich
-from mc.qdrant import ensure_collection, upsert_video
+from mc.qdrant import client_kwargs, ensure_collection, upsert_video
 from mc.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ def run_update(
     # Same db as push/apply/backfill and the API freshness check (review fix:
     # a private data/ingest.db left /health blind to update's last_success).
     state = state or StateStore(INGEST_DB_PATH)
-    client = client or QdrantClient(url=QDRANT_URL, timeout=60)
+    client = client or QdrantClient(url=QDRANT_URL, **client_kwargs(timeout=60))
     channels = channels or load_channels()
     discover = discover or list_channel_videos
     downloader = downloader or _default_downloader(cookies_path, transcripts_dir)
@@ -119,7 +119,9 @@ def run_update(
                     client, collection, video_id, downloader, metadata, state, queue_dir
                 )
             except Exception as exc:  # noqa: BLE001 — isolate every video
-                reason = str(exc) or type(exc).__name__
+                # Whitespace-collapsed: exc text lands in ignored_videos.txt
+                # and log lines, so embedded newlines must not forge entries.
+                reason = " ".join((str(exc) or type(exc).__name__).split())
                 if is_auth_failure(reason):
                     logger.error(
                         "auth failure for %s: cookies likely stale — "

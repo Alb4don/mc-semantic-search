@@ -36,7 +36,7 @@ def apply_boost(
 
     phrase = query.normalized_phrase
     demoted = [
-        r if phrase and phrase in normalize(r.text) else replace(r, score=r.score * factor)
+        r if phrase and phrase in normalize(r.text or "") else replace(r, score=r.score * factor)
         for r in results
     ]
     # Stable sort: ties keep their original relative order.

@@ -93,7 +93,11 @@ def add_to_ignore_list(
     """Append ``video_id`` to the ignore list once, with optional reason.
 
     Format mirrors v3: ``<id> # <reason>`` on a single line, no duplicates.
+    Both fields are whitespace-collapsed so embedded newlines cannot forge
+    extra ignore-list entries.
     """
+    video_id = " ".join(video_id.split())
+    reason = " ".join(reason.split())
     if is_ignored(video_id, ignore_file):
         return
     path = Path(ignore_file)
@@ -138,7 +142,11 @@ def _build_ydl_opts(
         "extractor_retries": 3,
         "fragment_retries": 3,
         "retry_sleep": 5,
-        "ignoreerrors": True,
+        # False so download failures raise into _attempt_language's
+        # classification path — True swallowed every error and made real
+        # failures indistinguishable from "no subtitles" (permanent
+        # ignore-list starvation).
+        "ignoreerrors": False,
     }
 
 
@@ -157,13 +165,22 @@ def download_transcript(
     ``<transcripts_dir>/<video_id>.srt`` — downloading via yt-dlp when the
     cache is missing — or ``None`` when the video has no usable subtitles
     (in which case it is appended to ``ignored_videos.txt`` exactly once).
+    Download failures other than missing subtitles propagate as exceptions
+    so the caller (``run_update``) can classify them (e.g. stale cookies).
     """
-    if not Path(cookies_path).exists():
+    cookies = Path(cookies_path)
+    if not cookies.exists():
         raise DownloadError(
             f"cookies file not found: {cookies_path!r}. Export cookies from "
             "your browser for youtube.com (e.g. with a cookie exporter "
             "extension) and pass the file path — see docs/tasks/cookies.md"
         )
+    if cookies.stat().st_mode & 0o077:  # group/other-readable credential file
+        logger.warning(
+            "cookies file %s is group/other-readable — tightening to 0600",
+            cookies,
+        )
+        cookies.chmod(0o600)
 
     run = runner if runner is not None else _default_ytdlp_runner
     transcripts_dir = Path(transcripts_dir)
@@ -218,13 +235,19 @@ def _attempt_language(
     max_retries: int,
     sleeper: Callable[[float], None],
 ) -> list[dict] | None:
-    """Try one language; backoff on 429, give up to the next language."""
+    """Try one language; backoff on 429; other failures raise to the caller.
+
+    Rate-limit errors retry with backoff and then fall through to the next
+    language. Any other failure propagates so ``run_update`` can classify it
+    (auth-shaped errors are never ignore-listed); a merely subtitle-less
+    video raises nothing — yt-dlp exits cleanly without writing the file.
+    """
     try:
         run(url, ydl_opts)
     except Exception as exc:
         if not _is_rate_limit_error(exc):
             logger.warning("subtitle attempt failed for %s: %s", url, exc)
-            return None  # non-rate-limit error: try next language
+            raise
         logger.warning("rate limited, retrying with backoff")
         for retry in range(max_retries):
             delay = (2**retry) * 10 + random.uniform(2, 15)
@@ -233,6 +256,8 @@ def _attempt_language(
             try:
                 run(url, ydl_opts)
             except Exception as retry_exc:
+                if not _is_rate_limit_error(retry_exc):
+                    raise
                 if retry == max_retries - 1:
                     logger.warning(
                         "max retries reached, trying next language: %s", retry_exc

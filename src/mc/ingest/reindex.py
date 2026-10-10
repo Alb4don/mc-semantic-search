@@ -31,6 +31,7 @@ from mc.ingest.models import Chunk
 from mc.qdrant import (
     COLLECTION_META_POINT_ID,
     ModelMismatchError,
+    client_kwargs,
     ensure_collection,
     read_meta_fingerprint,
     upsert_video,
@@ -59,7 +60,7 @@ def run_reindex(
     and model bookkeeping.
     """
     if client is None:
-        client = QdrantClient(url=QDRANT_URL, timeout=60)
+        client = QdrantClient(url=QDRANT_URL, **client_kwargs(timeout=60))
     target = target_collection or f"{source_collection}-v2"
 
     _refuse_bad_target(client, target)

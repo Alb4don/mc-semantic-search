@@ -90,6 +90,9 @@ def test_503_when_qdrant_unreachable(state):
     code, body = health_snapshot(UnreachableClient(), state, 72)
     assert code == 503
     assert body["status"] == "unreachable"
+    # No exception text in the body — internal qdrant URLs must not leak.
+    assert "detail" not in body
+    assert "connection refused" not in str(body)
 
 
 # --- /health endpoint (thin wrapper over the snapshot) -----------------------
@@ -122,3 +125,4 @@ def test_endpoint_503_with_unreachable_body(state):
     response = TestClient(app).get("/health")
     assert response.status_code == 503
     assert response.json()["status"] == "unreachable"
+    assert "detail" not in response.json()

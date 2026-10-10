@@ -57,3 +57,16 @@ def test_fresh_stale_check(tmp_path):
         # A lock held right now (mtime fresh) must not be considered stale.
         with pytest.raises(AlreadyRunning):
             RunLock(lock_path).acquire()
+
+
+def test_symlink_at_lock_path_is_not_followed(tmp_path):
+    """O_NOFOLLOW: a symlink planted at the lock path must not be opened."""
+    target = tmp_path / "victim.txt"
+    target.write_text("")
+    symlink = tmp_path / LOCK_PATH
+    symlink.symlink_to(target)
+
+    with pytest.raises(OSError):  # ELOOP from O_NOFOLLOW
+        RunLock(symlink).acquire()
+
+    assert target.read_text() == ""  # symlink target untouched

@@ -116,6 +116,22 @@ def test_empty_list_stays_empty():
     assert apply_boost([], PLAIN) == []
 
 
+def test_result_without_text_does_not_crash():
+    """Poisoned-index payload without `text` must demote, not raise (500)."""
+    result = SearchResult(
+        video_id="v1",
+        text=None,
+        url="https://www.youtube.com/watch?v=v1",
+        start_seconds=0,
+        date=None,
+        episode=None,
+        channel=None,
+        score=1.0,
+    )
+    boosted = apply_boost([result], VERBATIM, factor=FACTOR)
+    assert boosted[0].score == pytest.approx(FACTOR)  # demoted, not crashed
+
+
 def test_factor_parameter_overrides_default():
     results = [_result("a", 10.0, literal=False)]
     (only,) = apply_boost(results, VERBATIM, factor=0.25)

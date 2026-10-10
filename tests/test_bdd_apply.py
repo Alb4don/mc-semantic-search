@@ -177,3 +177,56 @@ def other_files_applied(ctx):
     assert _point_count(ctx) == len(ctx["other_records"])
     # the valid file was applied, not quarantined
     assert (ctx["queue_dir"] / "2026-10-10.jsonl").exists()
+
+
+# --- Unit regressions: Mode B queue validation (no qdrant needed) ------------
+
+
+def test_group_chunks_rejects_non_http_url():
+    """Queue records are untrusted: url must be http(s) (producer emits YouTube
+    watch URLs) or the whole file is quarantined."""
+    from mc.ingest.apply import _group_chunks
+
+    record = _record("vidX", 0)
+    record["url"] = "file:///etc/passwd"
+    with pytest.raises(ValueError, match="http"):
+        _group_chunks([record])
+
+    javascript = _record("vidX", 0)
+    javascript["url"] = "javascript:alert(1)"
+    with pytest.raises(ValueError, match="http"):
+        _group_chunks([javascript])
+
+
+def test_group_chunks_rejects_empty_or_oversized_text():
+    from mc.ingest.apply import _group_chunks
+
+    empty = _record("vidX", 0)
+    empty["text"] = ""
+    with pytest.raises(ValueError, match="text"):
+        _group_chunks([empty])
+
+    big = _record("vidX", 0)
+    big["text"] = "x" * 50_001
+    with pytest.raises(ValueError, match="50,?000"):
+        _group_chunks([big])
+
+
+def test_oversized_increment_file_quarantined_without_loading(tmp_path):
+    """A >100 MB increment must be quarantined via stat, never read_text()."""
+    from mc.ingest import apply as apply_mod
+
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    big = queue_dir / "big.jsonl"
+    with open(big, "wb") as fh:  # sparse — no data written
+        fh.truncate(apply_mod._MAX_FILE_BYTES + 1)
+
+    report = {"applied_chunks": 0, "files_processed": 0, "failed_files": 0, "notes": []}
+    apply_mod._apply_file(
+        queue_dir, big, state=object(), client=object(), collection="x", report=report
+    )
+
+    assert report["failed_files"] == 1
+    assert (queue_dir / "failed" / "big.jsonl").exists()
+    assert not big.exists()

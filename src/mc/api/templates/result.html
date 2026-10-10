@@ -14,6 +14,9 @@
     <p class="hit-snippet">{{ r.snippet | safe }}</p>
     <details class="player">
       <summary>▶ assistir o trecho em {{ r.tape }}</summary>
+      {# video_id is validated server-side ([A-Za-z0-9_-]{6,20}); a poisoned
+         payload must never reach the embed URL. #}
+      {% if r.video_id %}
       <iframe
         src="https://www.youtube-nocookie.com/embed/{{ r.video_id }}?start={{ r.start_seconds }}"
         loading="lazy"
@@ -21,6 +24,7 @@
         allowfullscreen
         title="trecho em {{ r.tape }}"
       ></iframe>
+      {% endif %}
     </details>
   </div>
 </article>

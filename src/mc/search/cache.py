@@ -8,6 +8,7 @@ state store's last_success timestamp advances (new ingest → new archive).
 from __future__ import annotations
 
 import logging
+import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
@@ -29,25 +30,32 @@ class ResultCache:
         self._data: OrderedDict[str, list[float]] = OrderedDict()
         self._fill_freshness: str | None = None
         self.metrics = {"hits": 0, "misses": 0}
+        # get() is check-then-insert shared across FastAPI threadpool threads.
+        self._lock = threading.Lock()
 
     def get(self, query: str) -> list[float]:
-        self._invalidate_if_stale()
-        if query in self._data:
-            self.metrics["hits"] += 1
+        with self._lock:
+            self._invalidate_if_stale()
+            if query in self._data:
+                self.metrics["hits"] += 1
+                self._data.move_to_end(query)
+                logger.debug("cache hit for %r (%s)", query, self.metrics)
+                return self._data[query]
+            self.metrics["misses"] += 1
+            vec = self._embedder(query)
+            self._data[query] = vec
             self._data.move_to_end(query)
-            logger.debug("cache hit for %r (%s)", query, self.metrics)
-            return self._data[query]
-        self.metrics["misses"] += 1
-        vec = self._embedder(query)
-        self._data[query] = vec
-        self._data.move_to_end(query)
-        while len(self._data) > self.size:
-            self._data.popitem(last=False)
-        logger.debug("cache miss for %r (%s)", query, self.metrics)
-        return vec
+            while len(self._data) > self.size:
+                self._data.popitem(last=False)
+            logger.debug("cache miss for %r (%s)", query, self.metrics)
+            return vec
 
     def _invalidate_if_stale(self) -> None:
-        current = self._read_freshness()
+        try:
+            current = self._read_freshness()
+        except Exception:  # transient read failure must NOT clear the cache
+            logger.exception("could not read freshness from state store")
+            return
         if current != self._fill_freshness:
             if self._fill_freshness is not None and self._data:
                 logger.info(
@@ -59,20 +67,20 @@ class ResultCache:
             self._data.clear()
 
     def _read_freshness(self) -> str | None:
-        """last_success from the state store, without keeping a connection."""
+        """last_success from the state store, without keeping a connection.
+
+        Raises on a transient read failure — the caller keeps the previous
+        freshness value (only genuinely changed data invalidates).
+        """
         from mc.state import StateStore
 
         if not self._state_db_path.exists():
             return None
+        store = StateStore(self._state_db_path)
         try:
-            store = StateStore(self._state_db_path)
-            try:
-                return store.last_success()
-            finally:
-                store.close()
-        except Exception:  # unreadable state must never break search
-            logger.exception("could not read freshness from state store")
-            return None
+            return store.last_success()
+        finally:
+            store.close()
 
     def __len__(self) -> int:
         return len(self._data)

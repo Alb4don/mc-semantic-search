@@ -26,6 +26,17 @@ _SEC_RE = re.compile(r"^(\d+)s?$")
 
 _QUARANTINE_HEADER = ["video_id_or_url", "reason"]
 
+# A cell starting with one of these executes as a formula when the quarantine
+# CSV is opened in Excel/LibreOffice — prefix it so it is treated as text.
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _defuse_formula(cell: str) -> str:
+    """Prefix formula-looking CSV cells with a single quote (spreadsheet safety)."""
+    if isinstance(cell, str) and cell.startswith(_FORMULA_PREFIXES):
+        return f"'{cell}"
+    return cell
+
 
 def parse_video_id(url: str) -> str | None:
     """Return the 11-char YouTube video id from a url, or ``None``."""
@@ -63,7 +74,12 @@ def _append_quarantine(url: str, video_id: str | None, reason: str, out_path: Pa
         writer = csv.writer(fh)
         if write_header:
             writer.writerow(_QUARANTINE_HEADER)
-        writer.writerow([video_id if video_id is not None else url, reason])
+        writer.writerow(
+            [
+                _defuse_formula(video_id if video_id is not None else url),
+                _defuse_formula(reason),
+            ]
+        )
 
 
 def iter_legacy_chunks(db_path: Path, quarantine_path: Path | None = None) -> Iterator[Chunk]:

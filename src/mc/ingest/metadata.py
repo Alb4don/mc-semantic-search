@@ -24,17 +24,24 @@ _YOUTUBE_URL = "https://www.youtube.com/watch?v={video_id}"
 _EPISODE_RE = r"#(\d+)"
 _FALLBACK_DIGITS_RE = r"\d+"
 _MAX_ATTEMPTS = 3
+_YTDLP_TIMEOUT_S = 120
 
 
 def _default_fetch(video_id: str) -> dict:
     """Fetch raw metadata for one video via the pinned yt-dlp dependency."""
     url = _YOUTUBE_URL.format(video_id=video_id)
-    proc = subprocess.run(
-        ["yt-dlp", "--dump-single-json", "--no-warnings", url],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["yt-dlp", "--dump-single-json", "--no-warnings", url],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_YTDLP_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"yt-dlp metadata fetch timed out after {_YTDLP_TIMEOUT_S}s"
+        ) from exc
     return json.loads(proc.stdout)
 
 
