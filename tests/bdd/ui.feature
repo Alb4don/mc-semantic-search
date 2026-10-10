@@ -9,7 +9,7 @@ Feature: Search page (HTML + htmx)
 
   Scenario: Empty results distinguish states
     When I search for something with no match
-    Then the page shows "Nenhum resultado encontrado" with the archive freshness line
+    Then the page shows "Muriel folheou o acervo inteiro" with the archive freshness line
     And the page does not look identical to a loading state
 
   Scenario: Freshness is visible

@@ -6,7 +6,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Morning Crypto — arquivo</title>
+  <title>Muriel — arquivo Morning Crypto</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/css/pico.min.css">
   <link rel="stylesheet" href="/static/css/mc.css">
@@ -15,8 +15,13 @@
 </head>
 <body>
   <header class="masthead">
-    <p class="over">acervo de transmissões — busca semântica</p>
-    <h1 class="wordmark">MORNING<span>/</span>CRYPTO</h1>
+    <div class="brand">
+      <img class="brand-mark" src="/static/img/logo.png" alt="" width="56" height="57">
+      <div>
+        <p class="over">acervo de transmissões — busca semântica</p>
+        <h1 class="wordmark">MORNING<span>/</span>CRYPTO</h1>
+      </div>
+    </div>
     <p class="promise">encontre o momento exato em que foi dito.</p>
   </header>
 
@@ -44,13 +49,53 @@
       {% include "results.html" %}
     {% else %}
       <div class="idle">
-        <p class="idle-hint">digite para buscar {{ stats }}</p>
+        {# Muriel, the librarian who catalogued everything said on air.
+           16x17 pixel sprite as crisp SVG rects — yellow body, black
+           cutouts, same visual grammar as the community mark. #}
+        <svg class="muriel" viewBox="0 0 16 17" shape-rendering="crispEdges"
+             role="img" aria-label="Muriel, bibliotecária do arquivo">
+          <g fill="#ffcc00">
+            <rect class="muriel-antenna" x="7" y="0" width="2" height="2"/>
+            <rect x="7" y="2" width="2" height="1"/>
+            <rect x="2" y="3" width="12" height="1"/>
+            <rect x="1" y="4" width="14" height="8"/>
+            <rect x="2" y="12" width="12" height="1"/>
+            <rect x="3" y="13" width="10" height="1"/>
+            <rect x="2" y="14" width="12" height="2"/>
+            <rect x="3" y="16" width="10" height="1"/>
+          </g>
+          <g fill="#14110b">
+            <!-- glasses -->
+            <rect x="1" y="6" width="1" height="1"/>
+            <rect x="2" y="5" width="5" height="4"/>
+            <rect x="7" y="6" width="2" height="1"/>
+            <rect x="9" y="5" width="5" height="4"/>
+            <rect x="14" y="6" width="1" height="1"/>
+            <!-- smile -->
+            <rect x="6" y="10" width="1" height="1"/>
+            <rect x="7" y="11" width="2" height="1"/>
+            <rect x="9" y="10" width="1" height="1"/>
+            <!-- the catalogue she holds, stamped with the mark's diamond -->
+            <rect x="5" y="14" width="6" height="3"/>
+          </g>
+          <g fill="#ffcc00">
+            <rect class="muriel-eye" x="4" y="6" width="2" height="2"/>
+            <rect class="muriel-eye" x="10" y="6" width="2" height="2"/>
+            <rect x="7" y="15" width="2" height="1"/>
+          </g>
+        </svg>
+        <div class="muriel-say">
+          <p class="say-name">Muriel — bibliotecária do acervo</p>
+          <p class="say-line say-idle">já cataloguei tudo que foi dito no ar. pergunte.</p>
+          <p class="say-line say-busy" aria-hidden="true">vasculhando as fitas…</p>
+        </div>
       </div>
     {% endif %}
   </main>
 
   <footer class="colophon">
     <p>{{ freshness_line }}</p>
+    <p class="colophon-note">muriel é a bibliotecária que encontra tudo que foi dito no morning crypto.</p>
     <p class="colophon-note">as buscas rodam no servidor — nada é rastreado.</p>
   </footer>
 </body>
