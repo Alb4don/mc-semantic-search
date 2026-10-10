@@ -36,3 +36,6 @@ build/
 # Meta cache (Story 2.2) and ignore lists hold derived data
 data/meta/
 transcripts/
+
+# Session tooling (agent plans, local-only)
+.zcode/
