@@ -20,6 +20,7 @@ from mc.config import (
     COLLECTION_NAME,
     COOKIES_PATH,
     DATA_DIR,
+    INGEST_DB_PATH,
     META_CACHE_DIR,
     QDRANT_URL,
     TRANSCRIPTS_DIR,
@@ -77,7 +78,9 @@ def run_update(
     queue_dir: Path | None = None,
 ) -> int:
     """Run one daily ingestion pass. Returns a process exit code."""
-    state = state or StateStore(DATA_DIR / "ingest.db")
+    # Same db as push/apply/backfill and the API freshness check (review fix:
+    # a private data/ingest.db left /health blind to update's last_success).
+    state = state or StateStore(INGEST_DB_PATH)
     client = client or QdrantClient(url=QDRANT_URL, timeout=60)
     channels = channels or load_channels()
     discover = discover or list_channel_videos

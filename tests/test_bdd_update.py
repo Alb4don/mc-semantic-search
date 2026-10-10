@@ -301,3 +301,24 @@ def test_no_subtitles_failure_is_ignore_listed(tmp_path):
     assert code == 1
     assert "quiet1" in (tmp_path / "transcripts" / "ignored_videos.txt").read_text()
     client.delete_collection(collection)
+
+
+def test_run_update_defaults_to_config_ingest_db_path(tmp_path, monkeypatch):
+    """Review fix: the default state DB is config.INGEST_DB_PATH (state/ingest.db),
+    not a separate data/ingest.db the API freshness check never reads."""
+    from mc import config
+
+    seen = {}
+
+    class SpyState:
+        def __init__(self, path):
+            seen["path"] = path
+
+    monkeypatch.setattr(update, "StateStore", SpyState)
+    update.run_update(
+        dry_run=True,
+        state=None,
+        discover=lambda channels: [],
+        lock_path=tmp_path / "update.lock",
+    )
+    assert seen["path"] == config.INGEST_DB_PATH
