@@ -40,6 +40,26 @@ logger = logging.getLogger(__name__)
 
 PENDING_NAME = "pending.jsonl"
 
+# Story 5.6: stale cookies look like any other download failure to yt-dlp,
+# but ignore-listing the video would skip it forever. Auth-shaped errors are
+# reported as a distinct reason and never ignore-list.
+_AUTH_MARKERS = (
+    "sign in",
+    "sign-in",
+    "log in",
+    "login",
+    "cookies",
+    "confirm you",
+    "not a bot",
+    "membership",
+    "unauthorized",
+)
+
+
+def is_auth_failure(reason: str) -> bool:
+    lowered = (reason or "").lower()
+    return any(marker in lowered for marker in _AUTH_MARKERS)
+
 
 def run_update(
     *,
@@ -88,10 +108,19 @@ def run_update(
                     client, collection, video_id, downloader, metadata, state, queue_dir
                 )
             except Exception as exc:  # noqa: BLE001 — isolate every video
+                reason = str(exc) or type(exc).__name__
+                if is_auth_failure(reason):
+                    logger.error(
+                        "auth failure for %s: cookies likely stale — "
+                        "rotate them (docs/tasks/cookies.md)",
+                        video_id,
+                    )
+                    failures.append((video_id, f"auth: {reason}"))
+                    continue
                 logger.exception("video %s failed", video_id)
-                failures.append((video_id, str(exc)))
+                failures.append((video_id, reason))
                 add_to_ignore_list(
-                    video_id, transcripts_dir / IGNORE_LIST_FILENAME, str(exc)
+                    video_id, transcripts_dir / IGNORE_LIST_FILENAME, reason
                 )
 
         logger.info(

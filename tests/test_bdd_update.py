@@ -221,3 +221,83 @@ def good_indexed_bad_ignored(ctx, good, bad):
 def exits_non_zero(ctx, caplog):
     assert ctx["exit_code"] == 1
     assert "bad1" in caplog.text and "failed" in caplog.text.lower()
+
+
+def test_auth_failure_is_not_ignore_listed(tmp_path, caplog):
+    """Story 5.6: stale-cookie (auth) failures get a distinct reason and the
+    video is never added to the ignore list — the episode is retried after
+    cookie rotation instead of skipped forever."""
+    import logging as _logging
+    import uuid as _uuid
+
+    from qdrant_client import QdrantClient as QC
+
+    client = QC(url="http://localhost:6333", timeout=30)
+    collection = f"mc-bdd-{_uuid.uuid4().hex[:8]}"
+    state = StateStore(tmp_path / "ingest.db")
+    queue_dir = tmp_path / "queue"
+
+    def stale_cookies(video_id: str):
+        raise RuntimeError("Sign in to confirm you're not a bot")
+
+    import mc.qdrant as q
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(q, "embed_passage", lambda texts: [[0.5] * 384 for _ in texts])
+    try:
+        with caplog.at_level(_logging.ERROR, logger="mc.ingest.update"):
+            code = update.run_update(
+                channels=("https://www.youtube.com/@test",),
+                state=state,
+                client=client,
+                collection=collection,
+                discover=lambda channels: ["stale1"],
+                downloader=stale_cookies,
+                metadata_fetch=lambda ids: {},
+                lock_path=tmp_path / "update.lock",
+                transcripts_dir=tmp_path / "transcripts",
+                queue_dir=queue_dir,
+            )
+    finally:
+        monkeypatch.undo()
+
+    assert code == 1
+    assert not (tmp_path / "transcripts" / "ignored_videos.txt").exists()
+    assert "cookies likely stale" in caplog.text
+    assert not state.is_processed("stale1")
+    client.delete_collection(collection)
+
+
+def test_no_subtitles_failure_is_ignore_listed(tmp_path):
+    """Non-auth download failures keep the v3 ignore-list semantics."""
+    import uuid as _uuid
+
+    from qdrant_client import QdrantClient as QC
+
+    client = QC(url="http://localhost:6333", timeout=30)
+    collection = f"mc-bdd-{_uuid.uuid4().hex[:8]}"
+    state = StateStore(tmp_path / "ingest.db")
+
+    import mc.qdrant as q
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(q, "embed_passage", lambda texts: [[0.5] * 384 for _ in texts])
+    try:
+        code = update.run_update(
+            channels=("https://www.youtube.com/@test",),
+            state=state,
+            client=client,
+            collection=collection,
+            discover=lambda channels: ["quiet1"],
+            downloader=lambda vid: None,
+            metadata_fetch=lambda ids: {},
+            lock_path=tmp_path / "update.lock",
+            transcripts_dir=tmp_path / "transcripts",
+            queue_dir=tmp_path / "queue",
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert code == 1
+    assert "quiet1" in (tmp_path / "transcripts" / "ignored_videos.txt").read_text()
+    client.delete_collection(collection)

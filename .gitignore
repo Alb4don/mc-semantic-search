@@ -13,6 +13,7 @@ snapshots/
 cookies*
 *cookies*
 www.youtube.com_cookies*
+!docs/tasks/cookies.md
 
 # Python
 __pycache__/
