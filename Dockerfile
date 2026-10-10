@@ -3,6 +3,8 @@
 FROM python:3.12-slim AS builder
 
 RUN python -m pip install --no-cache-dir --upgrade pip
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 # CPU-only torch first (small wheel), then the rest of the pinned deps.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir \
@@ -17,11 +19,13 @@ RUN pip install --no-cache-dir \
 
 FROM python:3.12-slim
 
-ENV PATH="/usr/local/bin:$PATH" \
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH=/app/src \
     SENTENCE_TRANSFORMERS_HOME=/models/st \
     FASTEMBED_CACHE_DIR=/models/fastembed \
-    HF_HOME=/models/hf \
-    TRANSFORMERS_OFFLINE=0
+    HF_HOME=/models/hf
+
+COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY src/mc/bake_models.py /app/src/mc/bake_models.py
