@@ -1,0 +1,181 @@
+"""Apply queued increments to the index (Story 3.7, Mode B server).
+
+Consumes the dated JSONL files pushed into the queue directory by
+`mc push`: parses the chunk records, groups them per video and reuses
+the embed+upsert path (`upsert_video`, atomic per-video transaction,
+Story 1.4). Applied-once bookkeeping is per CONTENT HASH of the chunk
+record (same convention as `mc push`, key prefix `applied:`), marked
+only after the video's upsert commits — so a crash or corrupt file
+leaves everything retryable and a re-run is a no-op. Malformed files
+are quarantined into <queue_dir>/failed/ instead of blocking the queue.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from datetime import datetime
+from pathlib import Path
+
+from qdrant_client import QdrantClient
+
+from mc import config
+from mc.ingest.lock import RunLock
+from mc.ingest.models import Chunk
+from mc.qdrant import upsert_video
+from mc.state import StateStore
+
+logger = logging.getLogger(__name__)
+
+_APPLIED_PREFIX = "applied:"
+_PENDING_NAME = "pending.jsonl"  # `mc update`'s staging file — never an increment
+_FAILED_DIR = "failed"
+_LOCK_NAME = "update.lock"  # shared with `mc update`/`mc push` so they never overlap
+
+
+def _content_hash(record: dict) -> str:
+    """sha256 of the canonical JSON dump — the same key convention as push."""
+    payload = json.dumps(record, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _queue_files(queue_dir: Path) -> list[Path]:
+    """Only dated `*.jsonl` increment files; skip update's pending.jsonl."""
+    return sorted(p for p in queue_dir.glob("*.jsonl") if p.name != _PENDING_NAME)
+
+
+def _parse_file(path: Path) -> list[dict]:
+    """Parse one increment file; raise ValueError on the first malformed line."""
+    records: list[dict] = []
+    for lineno, raw in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"line {lineno}: invalid JSON ({exc})") from None
+        if not isinstance(record, dict):
+            raise ValueError(f"line {lineno}: not a JSON object")
+        records.append(record)
+    return records
+
+
+def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
+    """Validate records into Chunks grouped by video_id; ValueError if malformed."""
+    grouped: dict[str, list[Chunk]] = {}
+    for record in records:
+        try:
+            chunk = Chunk(
+                video_id=str(record["video_id"]),
+                text=record["text"],
+                url=record["url"],
+                start_seconds=int(record["start_seconds"]),
+                date=record.get("date"),
+                episode=record.get("episode"),
+                channel=record.get("channel"),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"malformed record {record!r}: {exc}") from None
+        grouped.setdefault(chunk.video_id, []).append(chunk)
+    return grouped
+
+
+def _quarantine(queue_dir: Path, path: Path, exc: ValueError) -> None:
+    """Move a malformed increment into <queue_dir>/failed/ and log the error."""
+    failed_dir = queue_dir / _FAILED_DIR
+    failed_dir.mkdir(exist_ok=True)
+    path.replace(failed_dir / path.name)
+    logger.error("quarantined %s: %s", path.name, exc)
+
+
+def run_apply(
+    *,
+    queue_dir: Path | None = None,
+    state: StateStore | Path | None = None,
+    client: QdrantClient | None = None,
+    collection: str = config.COLLECTION_NAME,
+    lock_path: Path | None = None,
+) -> dict:
+    """Apply queued increments. Returns a report dict (see cli `mc apply`)."""
+    queue_dir = Path(queue_dir) if queue_dir is not None else config.QUEUE_DIR
+    if state is None:
+        state = StateStore(config.INGEST_DB_PATH)
+    elif not isinstance(state, StateStore):
+        state = StateStore(Path(state))
+    if client is None:
+        client = QdrantClient(url=config.QDRANT_URL, timeout=30)
+    lock_path = (
+        Path(lock_path) if lock_path is not None else queue_dir.parent / _LOCK_NAME
+    )
+
+    report: dict = {
+        "applied_chunks": 0,
+        "files_processed": 0,
+        "failed_files": 0,
+        "notes": [],
+    }
+    files = _queue_files(queue_dir)
+    if not files:
+        report["notes"].append("nothing to apply")
+        return report
+
+    with RunLock(lock_path):  # AlreadyRunning propagates to the caller (cron guard)
+        for path in files:
+            _apply_file(queue_dir, path, state, client, collection, report)
+
+    if report["applied_chunks"] == 0 and report["failed_files"] == 0:
+        report["notes"].append("nothing to apply")
+    return report
+
+
+def _apply_file(
+    queue_dir: Path,
+    path: Path,
+    state: StateStore,
+    client: QdrantClient,
+    collection: str,
+    report: dict,
+) -> None:
+    try:
+        records = _parse_file(path)
+        pairs = [
+            (record, _content_hash(record))
+            for record in records
+            if state.get_key(f"{_APPLIED_PREFIX}{_content_hash(record)}") is None
+        ]
+        chunks_by_video = _group_chunks([record for record, _ in pairs])
+    except ValueError as exc:
+        _quarantine(queue_dir, path, exc)
+        report["failed_files"] += 1
+        return
+
+    if not pairs:
+        return  # every chunk in this file was already applied — nothing to do
+
+    applied_hashes: list[str] = []
+    for video_id, chunks in sorted(chunks_by_video.items()):
+        try:
+            upsert_video(client, collection, video_id, chunks)
+        except Exception:
+            logger.exception(
+                "upsert failed for %s — %s left for retry", video_id, path
+            )
+            continue
+        hashes = [h for record, h in pairs if record["video_id"] == video_id]
+        for h in hashes:  # mark only AFTER the atomic per-video upsert committed
+            state.record_key(f"{_APPLIED_PREFIX}{h}", _now_iso())
+        applied_hashes.extend(hashes)
+
+    if applied_hashes:
+        report["applied_chunks"] += len(applied_hashes)
+        report["files_processed"] += 1
+    else:
+        report["notes"].append(f"{path.name}: no video applied — left for retry")
