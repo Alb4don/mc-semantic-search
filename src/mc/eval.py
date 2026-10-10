@@ -76,14 +76,15 @@ def reciprocal_rank(rank: int | None) -> float:
 
 
 def _find_rank(results: list[SearchResult], case: EvalCase) -> int | None:
-    """1-based rank of the case's literal chunk in the result list."""
-    for i, r in enumerate(results, start=1):
-        if r.url == case.url or (
-            getattr(r, "video_id", None) == case.video_id
-            and r.url.startswith(case.url.split("&")[0])
-        ):
-            return i
-    return None
+    """1-based rank of the case's literal chunk in the result list.
+
+    Exact chunk-URL match only (review fix): counting the first result of
+    the case's *video* inflated MRR and could flip the regression verdict.
+    """
+    return next(
+        (i for i, r in enumerate(results, start=1) if r.url == case.url),
+        None,
+    )
 
 
 def sparse_only_search(

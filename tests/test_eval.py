@@ -15,6 +15,7 @@ import pytest
 from mc.eval import (
     EvalCase,
     EvalReport,
+    _find_rank,
     format_report,
     load_suite,
     reciprocal_rank,
@@ -156,3 +157,23 @@ def test_hybrid_does_not_regress_verbatim_queries() -> None:
         hybrid_fn=hybrid_fn,
     )
     assert report.mrr_hybrid >= report.mrr_sparse
+
+
+def test_find_rank_matches_only_the_literal_chunk() -> None:
+    """Review fix: an unrelated chunk of the SAME video must not score as a
+    hit — only the case's literal chunk (exact chunk URL) counts."""
+    case = EvalCase(
+        id="c1",
+        quote="q",
+        video_id="video000001",
+        url="https://www.youtube.com/watch?v=video000001&t=30",
+    )
+    def res(url: str, video_id: str):
+        return type("R", (), {"url": url, "video_id": video_id})()
+
+    results = [
+        res("https://www.youtube.com/watch?v=video000001&t=0", "video000001"),
+        res("https://www.youtube.com/watch?v=other&t=5", "other"),
+        res(case.url, "video000001"),
+    ]
+    assert _find_rank(results, case) == 3
