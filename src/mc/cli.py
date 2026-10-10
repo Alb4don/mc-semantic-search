@@ -44,6 +44,19 @@ def _cmd_reindex(args: argparse.Namespace) -> int:
     return run_reindex(model=args.model)
 
 
+def _cmd_eval(args: argparse.Namespace) -> int:
+    from mc.eval import format_report, load_suite, run_eval
+
+    report = run_eval(load_suite(args.suite), limit=args.limit)
+    text = format_report(report)
+    print(text, end="")
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(text)
+    # Story 5.4 DoD: hybrid must not regress verbatim queries vs sparse-only
+    return 0 if report.mrr_hybrid >= report.mrr_sparse else 1
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -79,6 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("reindex", help="rebuild into a new collection and swap alias")
     p.add_argument("--model", required=True, help="dense model id to reindex with")
     p.set_defaults(func=_cmd_reindex)
+
+    p = sub.add_parser("eval", help="sparse-only vs hybrid MRR on known quotes")
+    p.add_argument("--suite", required=True, help="path to quotes.yaml")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--out", default=None, help="write the markdown report here")
+    p.set_defaults(func=_cmd_eval)
 
     p = sub.add_parser("serve", help="run the search API")
     p.set_defaults(func=_cmd_serve)
