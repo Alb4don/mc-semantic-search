@@ -1,8 +1,8 @@
 """Ingestion state store: durable bookkeeping in state/ingest.db (Story 1.5).
 
-Never on the search path — only ingest/bookkeeping code touches it. WAL
-mode + busy_timeout so a cron run never blocks the API (which doesn't
-read this db anyway) or another writer.
+Short-lived connections keep contention low: WAL mode + busy_timeout so a
+cron run never blocks the API, which opens one per request for the
+freshness line. Locking is transient and never destructive (review fix).
 """
 
 from __future__ import annotations
@@ -42,6 +42,10 @@ class StateStore:
             self._conn = self._connect()
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
+        except sqlite3.OperationalError:
+            # A locked/busy db is transient contention, not corruption —
+            # recreating here would wipe all bookkeeping (review fix).
+            raise
         except sqlite3.DatabaseError:
             logger.warning(
                 "state db %s is corrupt — recreating from scratch", self.path

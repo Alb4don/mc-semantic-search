@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
+
+import pytest
 
 from mc.state import StateStore
 
@@ -62,3 +65,30 @@ def test_processed_persisted(tmp_path):
     s1.close()
     s2 = StateStore(tmp_path / "ingest.db")
     assert s2.is_processed("vid1")
+
+
+def test_locked_db_raises_and_is_never_deleted(tmp_path, monkeypatch):
+    """Review fix: a transient lock (OperationalError) must propagate, never
+    trigger the corrupt-db unlink that wipes all bookkeeping."""
+
+    import mc.state as state_mod
+
+    monkeypatch.setattr(state_mod, "_BUSY_TIMEOUT_MS", 50)
+    db = tmp_path / "ingest.db"
+    holder = StateStore(db)
+    holder.mark_processed("vid1", "update")
+    holder.close()
+
+    # Committed schema hole (DROP is DDL = autocommit) + a separate
+    # connection holding the write lock → the next _open must write
+    # (CREATE TABLE meta) and block.
+    raw = sqlite3.connect(db)
+    raw.execute("DROP TABLE meta")
+    raw.execute("BEGIN EXCLUSIVE")
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="lock"):
+            StateStore(db)
+    finally:
+        raw.close()
+    # file intact: the original data must survive the failed open
+    assert StateStore(db).is_processed("vid1")
