@@ -1,0 +1,11 @@
+1
+00:00:01,000 --> 00:00:05,000
+Olá pessoal, hoje vamos falar sobre a mineração de Bitcoin
+
+2
+00:00:05,000 --> 00:00:09,000
+e o consumo de energia das mineradoras
+
+3
+00:00:09,000 --> 00:00:14,000
+O relatório mostra que a rede usa um mix de energia sustentável

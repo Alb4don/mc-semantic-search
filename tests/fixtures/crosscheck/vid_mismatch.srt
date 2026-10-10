@@ -1,0 +1,7 @@
+1
+00:00:01,000 --> 00:00:05,000
+Receita de bolo de chocolate com farinha, ovos e leite
+
+2
+00:00:05,000 --> 00:00:09,000
+Misture a massa e leve ao forno por quarenta minutos
