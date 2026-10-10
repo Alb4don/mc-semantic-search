@@ -25,6 +25,9 @@
 }
 
 html {
+  /* Pico scales the root to 18px+ at desktop widths; every size below is
+     authored against a 16px root — pin it or the whole system drifts. */
+  font-size: 16px;
   background: var(--mc-ground);
 }
 
@@ -98,6 +101,10 @@ body {
 
 .console input[type="search"] {
   flex: 1;
+  /* floor against flexbox collapse: with min-width:auto an input can be
+     squeezed to nothing once any sibling claims width — see button below */
+  min-width: 14rem;
+  margin: 0;
   background: var(--mc-ground-2);
   border: 1px solid var(--mc-line);
   border-left: 4px solid var(--mc-amber);
@@ -114,6 +121,12 @@ body {
 }
 
 .console button {
+  /* Pico ships button{display:block;width:100%;margin-bottom:...}; inside
+     this flex row that base size would devour the input (input computed to
+     32px, button to 884px). Content-size the button instead. */
+  width: auto;
+  margin: 0;
+  flex: none;
   background: var(--mc-amber);
   border: none;
   border-radius: 2px;
@@ -223,6 +236,12 @@ body {
   color: var(--mc-amber);
 }
 
+/* Pico paints a chevron data-URI onto summary::after; CSP blocks data: images
+   and the summary already carries its own ▶ marker — drop the box entirely. */
+.player summary::after {
+  display: none;
+}
+
 .player summary:hover {
   color: var(--mc-ink);
 }
@@ -257,18 +276,22 @@ body {
   text-align: center;
 }
 
-/* loading is visibly different from empty: amber pulse on a full-width bar */
-.htmx-request .idle-hint,
-.htmx-request .empty-head {
-  display: none;
-}
-
+/* loading is visibly different from empty: amber dots in the console, and
+   the idle/empty panels give way while a request is in flight. htmx stamps
+   htmx-request on the requesting element (the input), never on the swap
+   target — so select from the form via :has(); the descendant selectors
+   this replaces could never match. */
 .console-busy {
   display: none;
 }
 
-.htmx-request .console-busy {
+.console:has(.htmx-request) .console-busy {
   display: inline;
+}
+
+.console:has(.htmx-request) ~ #resultados .idle-hint,
+.console:has(.htmx-request) ~ #resultados .empty-head {
+  display: none;
 }
 
 /* ---------- colophon ---------- */
