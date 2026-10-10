@@ -110,7 +110,12 @@ def run_push(
             print("nothing to push")
             return 0
 
-        out_path = queue_dir / f"{_ship_date(now)}.jsonl"
+        # Per-run unique name: a same-day rerun must never rsync a truncated
+        # {date}.jsonl over the shipment still sitting on the remote (review
+        # fix). pushed: hashes make re-shipping impossible, so the morning
+        # batch would be lost for good.
+        stamp = datetime.now().strftime("%H%M%S.%f")
+        out_path = queue_dir / f"{_ship_date(now)}-{stamp}.jsonl"
         out_path.write_text(
             "".join(json.dumps(r, sort_keys=True) + "\n" for r, _ in unpushed),
             encoding="utf-8",
