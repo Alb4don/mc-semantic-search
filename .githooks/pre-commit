@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# NFR-5 guard: the YouTube cookies file is a live credential.
+# It must never be committed — not even accidentally renamed copies.
+set -euo pipefail
+
+PATTERN='www\.youtube\.com_cookies'
+
+if git diff --cached --name-only | grep -qiE "$PATTERN"; then
+    echo "ERROR: commit rejected — a file matching '$PATTERN' is staged." >&2
+    echo "YouTube cookies are live credentials (NFR-5). Unstage it:" >&2
+    echo "  git restore --staged <file>" >&2
+    exit 1
+fi

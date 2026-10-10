@@ -1,0 +1,48 @@
+[project]
+name = "mc-semantic-search"
+version = "0.1.0"
+description = "Morning Crypto semantic transcript search (Qdrant + FastAPI + htmx)"
+requires-python = ">=3.11"
+dependencies = [
+    "qdrant-client==1.12.0",
+    "fastembed==0.7.1",
+    "fastapi==0.115.12",
+    "uvicorn==0.34.0",
+    "jinja2==3.1.6",
+    "yt-dlp==2025.6.30",
+    "sentence-transformers==3.4.1",
+    "httpx==0.28.1",
+    "pyyaml==6.0.2",
+    "pytest==8.3.5",
+    "pytest-bdd==8.1.0",
+    "ruff==0.11.8",
+]
+
+[project.scripts]
+mc = "mc.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mc = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Dataclasses with many payload fields legitimately have few attributes per class.
+"src/mc/ingest/models.py" = ["RUF"]

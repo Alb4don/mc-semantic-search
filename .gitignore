@@ -1,0 +1,31 @@
+# Data & runtime state (never committed)
+data/
+state/
+snapshots/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# YouTube cookies are live credentials (NFR-5)
+cookies*
+*cookies*
+www.youtube.com_cookies*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Meta cache (Story 2.2) and ignore lists hold derived data
+data/meta/
+transcripts/
