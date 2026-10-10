@@ -6,6 +6,8 @@ snapshots/
 *.db-journal
 *.db-wal
 *.db-shm
+# ...but test fixture databases are committed data
+!tests/fixtures/*.db
 
 # YouTube cookies are live credentials (NFR-5)
 cookies*
