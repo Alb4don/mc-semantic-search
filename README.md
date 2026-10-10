@@ -47,3 +47,18 @@ mc apply         # Mode B server side: embed + upsert queued increments
 mc reindex --model <id>   # rebuild into a new collection, swap alias atomically
 mc serve         # FastAPI on :8080
 ```
+
+## Operations
+
+| Doc | What |
+|---|---|
+| `crontab.example` | Mode A crontab (daily update, nightly snapshot, weekly apply sanity, notify hook) |
+| `docs/tasks/mode-b-runbook.md` | Mode B fallback: local scrape + push, server apply, failover table |
+| `docs/tasks/deploy-runbook.md` | sats4.life deployment, staging route, eval + cutover + rollback |
+| `docs/tasks/cookies.md` | Cookie export/rotation + stale-cookie detection |
+| `docs/tasks/backup-restore.md` | Qdrant snapshots: create/restore drill |
+| `docs/tasks/eval-report.md` | Sparse-only vs hybrid MRR on known quotes (cutover evidence) |
+
+```bash
+mc eval --suite tests/eval/quotes.yaml --out docs/tasks/eval-report.md
+```
