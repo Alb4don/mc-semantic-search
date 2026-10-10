@@ -1,0 +1,73 @@
+"""Snippet selection & highlighting (Story 4.4).
+
+Picks the sentence with maximum term overlap with the query, falls back
+to the chunk start on pure-semantic matches, and highlights matched
+spans. All user-facing text is HTML-escaped BEFORE any <mark> is added,
+so query/content can never inject markup (XSS).
+"""
+
+from __future__ import annotations
+
+import html
+import re
+from dataclasses import dataclass
+
+from mc.search.query import normalize
+
+_SENTENCE_RE = re.compile(r"[.!?]+")
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+@dataclass(frozen=True)
+class Snippet:
+    highlighted: str
+    has_literal: bool
+
+
+def _words(text: str) -> list[str]:
+    return _WORD_RE.findall(normalize(text))
+
+
+def build_snippet(text: str, query: str, *, max_len: int = 280) -> Snippet:
+    qwords = set(_words(query))
+    sentences = [s.strip() for s in _SENTENCE_RE.split(text) if s.strip()]
+    if not sentences:
+        return Snippet(highlighted=html.escape(text[:max_len]), has_literal=False)
+
+    def overlap(sentence: str) -> int:
+        return len(qwords & set(_words(sentence)))
+
+    best_idx = 0
+    best_score = 0
+    for i, sentence in enumerate(sentences):
+        score = overlap(sentence)
+        if score > best_score:
+            best_idx, best_score = i, score
+
+    chosen = sentences[best_idx]
+    has_literal = best_score > 0 and _has_literal_phrase(chosen, query)
+    return Snippet(highlighted=_highlight(chosen, qwords), has_literal=has_literal)
+
+
+def _has_literal_phrase(text: str, query: str) -> bool:
+    if not query.strip():
+        return False
+    return normalize(query) in normalize(text)
+
+
+def _highlight(sentence: str, qwords: set[str]) -> str:
+    """Escape first, then add <mark> around query-word occurrences."""
+    if not qwords:
+        return html.escape(sentence)
+    pattern = re.compile(
+        r"(" + "|".join(re.escape(w) for w in sorted(qwords)) + r")",
+        re.IGNORECASE,
+    )
+
+    def mark(match: re.Match) -> str:
+        return f"<mark>{html.escape(match.group(0))}</mark>"
+
+    # Escape the sentence, then highlight against the escaped text — the
+    # regex operates on word characters only, so escaping first is safe.
+    escaped = html.escape(sentence)
+    return pattern.sub(mark, escaped)
