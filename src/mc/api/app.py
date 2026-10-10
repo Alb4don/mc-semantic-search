@@ -25,6 +25,8 @@ from mc.config import (
     INGEST_DB_PATH,
     QDRANT_URL,
 )
+from mc.search import engine as search_engine
+from mc.search.cache import ResultCache
 from mc.search.engine import SearchResult
 from mc.search.engine import search as run_search
 from mc.search.query import parse_query
@@ -102,9 +104,12 @@ def create_app(
         StaticFiles(directory=Path(__file__).parent / "static"),
         name="static",
     )
-    # Story 4.7 (ResultCache) will plug in here: the cache is an embedder-level
-    # LRU and the engine embeds internally, so the wiring lands in engine.py.
-    app.state.cache = cache
+    # Story 4.7 wiring (review fix): every app gets the embedder-level LRU by
+    # default — the engine consults it per request, so a crawler can't starve
+    # the embedder (NFR-1). Tests inject their own cache to spy on it.
+    cache = cache if cache is not None else ResultCache(
+        lambda query: search_engine.embed_query(query), _state_db
+    )
 
     def _freshness() -> dict:
         try:
@@ -116,7 +121,11 @@ def create_app(
     def _video_results(query: str, effective_limit: int) -> list[dict]:
         try:
             results: list[SearchResult] = run_search(
-                qdrant, query, limit=effective_limit, collection=collection
+                qdrant,
+                query,
+                limit=effective_limit,
+                collection=collection,
+                cache=cache,
             )
         except Exception as exc:  # transport failure → 503, never 500
             raise HTTPException(

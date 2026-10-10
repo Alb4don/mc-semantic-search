@@ -72,3 +72,29 @@ def test_metrics_logged(tmp_path, caplog):
         cache.get("x")
     assert cache.metrics == {"hits": 2, "misses": 2}
     assert any("hit" in r.message.lower() for r in caplog.records)
+
+
+def test_engine_search_consults_cache(monkeypatch, tmp_path):
+    """Review fix (Story 4.7 wiring): engine.search with a cache embeds the
+    dense query once across identical queries — the crawler guard is live."""
+    from mc.search import engine as engine_mod
+    from mc.search.cache import ResultCache
+    from mc.search.engine import search
+
+    calls: list[str] = []
+    real = engine_mod.embed_query
+
+    def spy(query: str) -> list[float]:
+        calls.append(query)
+        return real(query)
+
+    monkeypatch.setattr(engine_mod, "embed_query", spy)
+
+    class StubClient:
+        def query_points(self, **kwargs):
+            return type("Resp", (), {"points": []})()
+
+    cache = ResultCache(spy, tmp_path / "ingest.db", size=8)
+    search(StubClient(), "bitcoin preço", collection="x", cache=cache)
+    search(StubClient(), "bitcoin preço", collection="x", cache=cache)
+    assert len(calls) == 1, "second identical query must be served from cache"

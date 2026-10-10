@@ -1,7 +1,8 @@
 """Hybrid search: dense + sparse prefetch fused by Qdrant's native RRF.
 
 Story 4.2. The engine owns fusion — the API layer only receives a typed
-list of results. No boosting/caching here (Story 4.3 extends this).
+list of results. Boosting lives in ranking.py; the optional ResultCache
+(Story 4.7) wraps the dense query embedding here.
 """
 
 from __future__ import annotations
@@ -40,18 +41,27 @@ def search(
     *,
     limit: int = 10,
     collection: str = COLLECTION_NAME,
+    cache: object | None = None,
 ) -> list[SearchResult]:
-    """Run hybrid (dense+sparse, RRF-fused) search on the given collection."""
+    """Run hybrid (dense+sparse, RRF-fused) search on the given collection.
+
+    ``cache`` (Story 4.7, review fix) is an optional ResultCache consulted
+    for the dense query embedding so a crawler can't starve the embedder.
+    """
     query = parse_query(query_raw)
     if not query.normalized:
         return []
 
     # NFR-1: both embedder calls inside a max_workers=1 executor.
     with ThreadPoolExecutor(max_workers=EMBED_EXECUTOR_WORKERS) as pool:
-        dense_future = pool.submit(embed_query, query.normalized)
-        sparse_future = pool.submit(embed_sparse, [query.normalized])
-        dense = dense_future.result()
-        (sparse,) = sparse_future.result()
+        dense_task = (
+            pool.submit(cache.get, query.normalized)
+            if cache is not None
+            else pool.submit(embed_query, query.normalized)
+        )
+        sparse_task = pool.submit(embed_sparse, [query.normalized])
+        dense = dense_task.result()
+        (sparse,) = sparse_task.result()
 
     prefetch: list[models.Prefetch] = [
         models.Prefetch(query=dense, using=DENSE_VECTOR, limit=max(limit, 10))

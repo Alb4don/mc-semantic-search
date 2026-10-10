@@ -205,7 +205,7 @@ def test_verbatim_query_applies_quote_boost_via_api(tmp_path, monkeypatch):
         score=1.5,  # higher raw score, but lacks the literal phrase
     )
 
-    def fake_search(client, query_raw, *, limit=10, collection=None):
+    def fake_search(client, query_raw, *, limit=10, collection=None, cache=None):
         return [paraphrase, literal]
 
     monkeypatch.setattr(app_module, "run_search", fake_search)
