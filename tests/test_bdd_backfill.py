@@ -69,6 +69,7 @@ def ctx(tmp_path):
         "client": client,
         "collection": collection,
         "state_db": state_db,
+        "lock_path": tmp_path / "backfill.lock",
         "embedded_texts": [],
         "kill_after_commit": None,
     }
@@ -116,6 +117,7 @@ def _run(ctx):
             client=ctx["client"],
             collection=ctx["collection"],
             state=state,
+            lock_path=ctx["lock_path"],
             kill_after_commit=kill_after_commit,
         )
     finally:
