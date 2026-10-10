@@ -183,10 +183,27 @@ def top_results_are_semantic_chunks(ctx):
     assert set(INFLATION_VIDEOS) <= set(ids[:3]), ids[:3]
 
 
-@then("results are not penalized for lacking the literal phrase")
-def no_penalty_for_non_verbatim(ctx):
+@then("results are demoted only by the query terms they lack")
+def demoted_only_by_missing_terms(ctx):
     query = ctx["query"]
     assert not query.is_verbatim
-    assert query.normalized_phrase is None
-    # apply_boost passed the engine results through untouched
-    assert ctx["results"] == ctx["raw_results"]
+    # Coverage rule: a chunk containing every content term keeps its raw
+    # score; each missing term multiplies by the boost factor. Count and
+    # texts are preserved — only scores shrink, by exact powers of 0.5.
+    from mc.search.ranking import _content_terms
+
+    terms = _content_terms(query.normalized)
+    assert terms
+    results = ctx["results"]
+    assert len(results) == len(ctx["raw_results"])
+    # apply_boost re-sorts, so pair with the raw scores by video id
+    raw_by_id = {r.video_id: r for r in ctx["raw_results"]}
+    for boosted in results:
+        raw = raw_by_id[boosted.video_id]
+        hay = normalize(raw.text or "")
+        missing = sum(
+            1
+            for t in terms
+            if re.search(rf"(?<!\w){re.escape(t)}(?!\w)", hay) is None
+        )
+        assert boosted.score == pytest.approx(raw.score * 0.5**missing)

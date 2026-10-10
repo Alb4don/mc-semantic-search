@@ -47,19 +47,110 @@ VERBATIM = parse_query(f'"{PHRASE}"')
 PLAIN = parse_query("regulamentação de criptoativos")
 
 
-# --- Non-verbatim queries pass through untouched ------------------------------
+# --- Unquoted queries: literal-term coverage demotion --------------------------
+# A chunk containing every content term keeps its score; each missing term
+# halves it. The fixture's non-literal text contains BOTH terms of PLAIN, so
+# it keeps its score — on-topic chunks are never penalized.
 
 
-def test_non_verbatim_returns_results_unchanged():
+def test_non_verbatim_full_coverage_keeps_scores():
+    """The regulation chunk contains both query terms → untouched; the
+    bitcoin chunk shares no term → ×factor². Order is preserved (3.0 > 0.25)
+    and count never changes."""
     results = [_result("a", 3.0, literal=False), _result("b", 1.0, literal=True)]
     boosted = apply_boost(results, PLAIN, factor=FACTOR)
-    assert boosted == results
-    assert [r.score for r in boosted] == [3.0, 1.0]
+    assert [r.video_id for r in boosted] == ["a", "b"]
+    assert [r.score for r in boosted] == [3.0, 1.0 * FACTOR**2]
 
 
-def test_non_verbatim_never_touches_scores_even_without_phrase():
+def test_non_verbatim_partial_coverage_demotes_by_missing_terms():
+    """One of two content terms missing → ×factor; both missing → ×factor²."""
+    query = parse_query("bitcoin é bolha")
+    both = SearchResult(
+        video_id="both",
+        text="o analista repete que bitcoin é bolha e o mercado ignora",
+        url="https://www.youtube.com/watch?v=both",
+        start_seconds=0,
+        date=None,
+        episode=None,
+        channel=None,
+        score=1.0,
+    )
+    only_bitcoin = SearchResult(
+        video_id="one",
+        text="o bitcoin fechou a semana em alta",
+        url="https://www.youtube.com/watch?v=one",
+        start_seconds=0,
+        date=None,
+        episode=None,
+        channel=None,
+        score=1.0,
+    )
+    neither = _result("none", 1.0, literal=False)  # regulamentação text
+    boosted = apply_boost([both, only_bitcoin, neither], query, factor=FACTOR)
+    by_id = {r.video_id: r for r in boosted}
+    assert by_id["both"].score == pytest.approx(1.0)  # full coverage untouched
+    assert by_id["one"].score == pytest.approx(FACTOR)  # 1 of 2 missing
+    assert by_id["none"].score == pytest.approx(FACTOR**2)  # 2 of 2 missing
+    assert [r.video_id for r in boosted] == ["both", "one", "none"]
+
+
+def test_non_verbatim_no_match_scales_uniformly_order_unchanged():
+    """Pure-semantic queries: nothing matches → all scaled equally → same order."""
+    query = parse_query("ferrari vermelha")
+    results = [_result("a", 3.0, literal=False), _result("b", 1.0, literal=True)]
+    boosted = apply_boost(results, query, factor=FACTOR)
+    assert [r.video_id for r in boosted] == ["a", "b"]
+    assert [r.score for r in boosted] == [3.0 * FACTOR**2, 1.0 * FACTOR**2]
+
+
+def test_non_verbatim_single_result_never_rescaled():
+    """With one result there is nothing to reorder — pass through untouched."""
     results = [_result("a", 2.0, literal=False)]
     assert apply_boost(results, PLAIN, factor=0.0) == results
+
+
+def test_unquoted_literal_query_surfaces_literal_chunk():
+    """The user-facing fix: 'bitcoin é bolha' (no quotes) ranks the on-topic
+    chunk above chunks sharing no term. Scores mirror the real RRF spread
+    measured on the corpus (tight clustering: 0.5 vs 0.3556) — with the wide
+    synthetic gaps of the other fixtures the demotion could not reorder."""
+    query = parse_query("bitcoin é bolha")
+    junk1 = SearchResult(
+        video_id="junk1",
+        text="aos que ainda tem que ter isso em relação a lei e chegaram né",
+        url="https://www.youtube.com/watch?v=junk1",
+        start_seconds=0,
+        date=None,
+        episode=None,
+        channel=None,
+        score=0.5,
+    )
+    junk2 = SearchResult(
+        video_id="junk2",
+        text="o celular falei com é tentar numa atacada e deixa eu ver se é esse",
+        url="https://www.youtube.com/watch?v=junk2",
+        start_seconds=0,
+        date=None,
+        episode=None,
+        channel=None,
+        score=0.5,
+    )
+    on_topic = SearchResult(
+        video_id="topic",
+        text="muita gente fala sobre cripto em geral ainda é uma bolha gigante",
+        url="https://www.youtube.com/watch?v=topic",
+        start_seconds=0,
+        date=None,
+        episode=None,
+        channel=None,
+        score=0.3556,  # engine ranked it third
+    )
+    boosted = apply_boost([junk1, junk2, on_topic], query, factor=FACTOR)
+    assert boosted[0].video_id == "topic"
+    # missing "bitcoin" → ×0.5; the junk chunks miss both terms → ×0.25
+    assert boosted[0].score == pytest.approx(0.3556 * FACTOR)
+    assert [r.video_id for r in boosted[1:]] == ["junk1", "junk2"]
 
 
 # --- Verbatim: demote, never drop ---------------------------------------------

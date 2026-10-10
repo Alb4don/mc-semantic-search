@@ -154,3 +154,9 @@ cases:
     o banco por completo nas criptomoedas
   video_id: PQ_afzehOT4
   url: https://www.youtube.com/watch?v=PQ_afzehOT4&t=0
+# Natural-language (unquoted) case: the user asks a short question, the
+# expected chunk discusses crypto being a bubble (no literal phrase).
+- id: r9EOX35UiZQ
+  quote: bitcoin é bolha
+  video_id: r9EOX35UiZQ
+  url: https://www.youtube.com/watch?v=r9EOX35UiZQ&t=6403

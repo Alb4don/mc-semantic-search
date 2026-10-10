@@ -67,8 +67,13 @@ def search(
         dense = dense_task.result()
         (sparse,) = sparse_task.result()
 
+    # RRF is rank-based and discards absolute scores, so per-leg pools must
+    # oversample: at limit=10 a bare 10-item pool leaves relevant chunks to be
+    # tie-broken out by point order before fusion ever sees them. 3× (min 30)
+    # gives the fusion stage enough candidates to surface real matches.
+    prefetch_limit = max(limit * 3, 30)
     prefetch: list[models.Prefetch] = [
-        models.Prefetch(query=dense, using=DENSE_VECTOR, limit=max(limit, 10))
+        models.Prefetch(query=dense, using=DENSE_VECTOR, limit=prefetch_limit)
     ]
     if sparse.indices:
         prefetch.append(
@@ -78,7 +83,7 @@ def search(
                     values=list(sparse.values),
                 ),
                 using=SPARSE_VECTOR,
-                limit=max(limit, 10),
+                limit=prefetch_limit,
             )
         )
 

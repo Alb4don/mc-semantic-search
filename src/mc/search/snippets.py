@@ -22,6 +22,11 @@ _WORD_RE = re.compile(r"\w+", re.UNICODE)
 # pathological query can't amplify regex work.
 MAX_HIGHLIGHT_WORDS = 32
 
+# Tokens shorter than 3 chars carry no highlight signal in Portuguese: the
+# diacritic fold turns the copula "é" into the conjunction "e", and an
+# unanchored 1-char pattern would mark the letter "e" inside every word.
+MIN_HIGHLIGHT_LEN = 3
+
 
 @dataclass(frozen=True)
 class Snippet:
@@ -33,8 +38,13 @@ def _words(text: str) -> list[str]:
     return _WORD_RE.findall(normalize(text))
 
 
+def _content_words(text: str) -> list[str]:
+    """Query words worth matching: folded words of length >= MIN_HIGHLIGHT_LEN."""
+    return [w for w in _words(text) if len(w) >= MIN_HIGHLIGHT_LEN]
+
+
 def build_snippet(text: str, query: str, *, max_len: int = 280) -> Snippet:
-    qwords = set(_words(query)[:MAX_HIGHLIGHT_WORDS])
+    qwords = set(_content_words(query)[:MAX_HIGHLIGHT_WORDS])
     sentences = [s.strip() for s in _SENTENCE_RE.split(text) if s.strip()]
     if not sentences:
         return Snippet(highlighted=html.escape(text[:max_len]), has_literal=False)
@@ -61,11 +71,15 @@ def _has_literal_phrase(text: str, query: str) -> bool:
 
 
 def _highlight(sentence: str, qwords: set[str]) -> str:
-    """Escape first, then add <mark> around query-word occurrences."""
+    """Escape first, then add <mark> around whole-word query matches.
+
+    Word boundaries are mandatory: without them a folded 1-char token ("é"
+    → "e") matches the letter "e" inside every word of the snippet.
+    """
     if not qwords:
         return html.escape(sentence)
     pattern = re.compile(
-        r"(" + "|".join(re.escape(w) for w in sorted(qwords)) + r")",
+        r"(?<!\w)(" + "|".join(re.escape(w) for w in sorted(qwords)) + r")(?!\w)",
         re.IGNORECASE,
     )
 

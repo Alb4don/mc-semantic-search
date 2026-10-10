@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 
 from mc.search.snippets import build_snippet
 
@@ -62,3 +63,38 @@ def test_highlight_words_capped_at_32():
     assert "<mark>w00</mark>" in snip.highlighted  # within the cap
     assert "<mark>w63</mark>" not in snip.highlighted  # beyond the 32-word cap
     assert snip.has_literal is False
+
+
+# --- Regression: folded short tokens must not scatter single-letter marks -----
+
+
+def test_folded_copula_does_not_mark_every_letter():
+    """'bitcoin é bolha' folds 'é' to 'e'; the 1-char token must be excluded
+    entirely — an unanchored alternation once marked the letter 'e' inside
+    every word of the snippet."""
+    snip = build_snippet(TEXT, "bitcoin é bolha")
+    assert "<mark>e</mark>" not in snip.highlighted
+    assert "<mark>é</mark>" not in snip.highlighted
+    assert "<mark>bitcoin</mark>" in snip.highlighted
+    assert "<mark>bolha</mark>" in snip.highlighted
+    # every <mark> opens at a word boundary (never mid-word)
+    for m in re.finditer(r"<mark>", snip.highlighted):
+        prev = snip.highlighted[m.start() - 1] if m.start() else " "
+        assert not (prev.isalnum() or prev == "_"), snip.highlighted
+
+
+def test_highlight_matches_whole_words_only():
+    """'mercado' must not light up inside 'mercados'."""
+    snip = build_snippet(
+        "Os mercados caíram hoje. Outra frase sem termos relevantes.", "mercado"
+    )
+    assert "<mark>mercado</mark>" not in snip.highlighted
+
+
+def test_short_query_words_excluded_from_sentence_choice():
+    """A 1-2 char query token can't decide which sentence wins the overlap."""
+    # Sentence 2 only overlaps via the folded stopword 'e' — sentence 1 has
+    # the real term, so it must win despite fewer raw (unfiltered) hits.
+    text = "Falei do bitcoin ontem à noite. E e e e e nada mais aqui."
+    snip = build_snippet(text, "bitcoin é")
+    assert "bitcoin" in snip.highlighted
