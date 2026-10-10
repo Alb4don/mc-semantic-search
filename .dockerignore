@@ -1,0 +1,45 @@
+# Build context excludes. The image itself only COPYs src/mc/ (see Dockerfile),
+# so nothing here can leak into a layer — this keeps the context sent to the
+# Docker daemon small and adds defense-in-depth for secrets and runtime data.
+
+# Data & runtime state (mirror .gitignore)
+data/
+state/
+snapshots/
+transcripts/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# YouTube cookies are live credentials (NFR-5) — never enter the context
+cookies*
+*cookies*
+www.youtube.com_cookies*
+
+# Local env file: may hold secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# VCS and session tooling
+.git/
+.gitignore
+.githooks/
+.zcode/
+
+# Docs and tests are not needed to build or run the image
+docs/
+tests/
