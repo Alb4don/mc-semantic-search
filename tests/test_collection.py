@@ -46,14 +46,12 @@ def test_create_sets_named_vectors_and_payload_indexes(qdrant, collection_name):
 
     info = get_collection(qdrant, collection_name)
     vectors = info.config.params.vectors
+    sparse_vectors = info.config.params.sparse_vectors
     # Named vectors: dense (384, cosine) + sparse (bm25).
     assert "dense" in vectors
     assert vectors["dense"].size == DENSE_DIM == 384
     assert vectors["dense"].distance == qm.Distance.COSINE
-    assert "sparse" in vectors
-    assert vectors["sparse"] is qm.SparseVectorIndex() or isinstance(
-        vectors["sparse"], qm.SparseVectorIndex
-    )
+    assert "sparse" in sparse_vectors
 
     payload_schema = info.payload_schema
     for field in ["date", "video_id", "channel"]:

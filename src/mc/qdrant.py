@@ -68,13 +68,13 @@ def ensure_collection(client: QdrantClient, name: str, *, force: bool = False) -
         client.create_payload_index(
             collection_name=name,
             field_name=field,
-            field_type=models.PayloadSchemaType.KEYWORD,
+            field_schema=models.PayloadSchemaType.KEYWORD,
         )
     for field in DATETIME_INDEX_FIELDS:
         client.create_payload_index(
             collection_name=name,
             field_name=field,
-            field_type=models.PayloadSchemaType.DATETIME,
+            field_schema=models.PayloadSchemaType.DATETIME,
         )
     _write_meta_fingerprint(client, name, fingerprint)
     logger.info("collection %s created (fingerprint recorded)", name)
