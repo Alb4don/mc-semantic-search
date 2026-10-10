@@ -130,17 +130,26 @@ def upsert_video(
     chunks: list[Chunk],
     *,
     force: bool = False,
+    embed_batch_size: int | None = None,
 ) -> None:
     """Replace the video's points in ONE atomic operation (Story 1.4, NFR-3).
 
     Delete-then-insert semantics inside a single Qdrant write batch: a
-    crash can never leave half a video indexed.
+    crash can never leave half a video indexed. Embedding may be split
+    into `embed_batch_size`-sized calls; the commit stays atomic.
     """
     ensure_collection(client, collection_name, force=force)
 
     texts = [c.text for c in chunks]
-    dense = embed_passage(texts)
-    sparse = embed_sparse(texts)
+    if embed_batch_size:
+        dense: list[list[float]] = []
+        sparse: list = []
+        for i in range(0, len(texts), embed_batch_size):
+            dense.extend(embed_passage(texts[i : i + embed_batch_size]))
+            sparse.extend(embed_sparse(texts[i : i + embed_batch_size]))
+    else:
+        dense = embed_passage(texts)
+        sparse = embed_sparse(texts)
 
     operations: list = []
     old_ids = _existing_point_ids(client, collection_name, video_id)
