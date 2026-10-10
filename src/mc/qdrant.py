@@ -146,13 +146,11 @@ def upsert_video(
     old_ids = _existing_point_ids(client, collection_name, video_id)
     if old_ids:
         operations.append(
-            models.DeleteOperation(
-                delete=models.DeletePoints(points=models.PointIdList(points=old_ids))
-            )
+            models.DeleteOperation(delete=models.PointIdsList(points=old_ids))
         )
     operations.append(
         models.UpsertOperation(
-            upsert=models.UpsertPoints(
+            upsert=models.PointsList(
                 points=[
                     models.PointStruct(
                         id=_point_id(video_id, c.start_seconds),
@@ -170,7 +168,9 @@ def upsert_video(
             )
         )
     )
-    client.batch_update_points(collection_name=collection_name, operations=operations)
+    client.batch_update_points(
+        collection_name=collection_name, update_operations=operations
+    )
 
 
 def _existing_point_ids(client: QdrantClient, name: str, video_id: str) -> list[int]:
