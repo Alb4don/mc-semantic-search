@@ -58,7 +58,7 @@ def test_compose_up_api_answers_health():
         for _ in range(deadline * 2):
             try:
                 with urllib.request.urlopen(
-                    "http://localhost:8080/health", timeout=2
+                    "http://localhost:18080/health", timeout=2
                 ) as resp:
                     ok = resp.status == 200
                     break
