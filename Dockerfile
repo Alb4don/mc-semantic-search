@@ -28,12 +28,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
-COPY src/mc/bake_models.py /app/src/mc/bake_models.py
-COPY src/mc/config.py /app/src/mc/config.py
-COPY src/mc/__init__.py /app/src/mc/__init__.py
-COPY src/mc/api/ /app/src/mc/api/
-COPY templates/ /app/templates/
-COPY static/ /app/static/
+COPY src/mc/ /app/src/mc/
 
 RUN python /app/src/mc/bake_models.py
 

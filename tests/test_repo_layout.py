@@ -128,6 +128,20 @@ def test_pre_commit_hook_rejects_cookie_files(tmp_path):
     assert "cookie" in (result.stdout + result.stderr).lower()
 
 
+def test_dockerfile_copies_full_package():
+    """The image must ship every src/mc module the api imports — not just api/."""
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+    assert "COPY src/mc/ /app/src/mc/" in dockerfile, (
+        "Dockerfile must COPY the whole src/mc package; a partial COPY set "
+        "makes uvicorn die with ModuleNotFoundError at container start"
+    )
+    for stale in ["COPY templates/", "COPY static/"]:
+        assert stale not in dockerfile, (
+            f"{stale} copies an empty placeholder dir; templates/static live "
+            "under src/mc/api/"
+        )
+
+
 def test_hooks_path_configured():
     result = subprocess.run(
         ["git", "config", "core.hooksPath"], cwd=REPO_ROOT, capture_output=True, text=True
