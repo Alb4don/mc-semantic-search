@@ -1,18 +1,21 @@
 /* Copy-to-clipboard for the agent box phrase. Progressive enhancement:
-   the button ships [hidden] and only appears when this script runs, so
-   the page stays fully usable without JS. data-copy names the element
-   whose text goes to the clipboard; data-label/data-copied-label carry
-   the button wording. No dependencies: htmx/Alpine stay untouched. */
+   the corner icon chip ships [hidden] and only appears when this script
+   runs, so the page stays fully usable without JS. data-copy names the
+   element whose text goes to the clipboard. Feedback is class-driven —
+   copy icon swaps to a check, and the sr-only role=status span announces
+   the result. No dependencies: htmx/Alpine stay untouched. */
 (function () {
   "use strict";
 
   var RESET_MS = 2000;
 
-  function flash(btn, label) {
-    btn.textContent = label;
+  function flash(btn, ok) {
+    btn.classList.add(ok ? "copied" : "failed");
+    var state = btn.parentNode.querySelector(".copy-state");
+    if (state) state.textContent = ok ? "copiado" : "não deu para copiar";
     setTimeout(function () {
-      btn.textContent = btn.getAttribute("data-label") || "copiar";
       btn.classList.remove("copied", "failed");
+      if (state) state.textContent = "";
     }, RESET_MS);
   }
 
@@ -41,8 +44,7 @@
       var text = source ? source.innerText.trim() : "";
       if (!text) return;
       var done = function (ok) {
-        btn.classList.add(ok ? "copied" : "failed");
-        flash(btn, ok ? btn.getAttribute("data-copied-label") || "copiado ✓" : "não deu");
+        flash(btn, ok);
       };
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(

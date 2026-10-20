@@ -103,19 +103,30 @@
     <h2 class="agent-title" id="agent-note-title">{{ agent_box.title }}</h2>
     <p class="agent-lead">{{ agent_box.lead }}</p>
     <p class="agent-command">
-      <code id="agent-phrase">{{ agent_box.question }} <a href="{{ agent_box.manual_path }}">{{ agent_box.manual_url }}</a></code>
-      {# Copy affordance for the paste-ready phrase. Ships [hidden] and is
-         revealed by /static/js/copy.js — without JS the page loses nothing,
-         the phrase stays selectable text. #}
-      <button
-        type="button"
-        class="copy-btn"
-        data-copy="#agent-phrase"
-        data-label="copiar"
-        data-copied-label="copiado ✓"
-        aria-live="polite"
-        hidden
-      >copiar</button>
+      <span class="command-wrap">
+        <code id="agent-phrase">{{ agent_box.question }} <a href="{{ agent_box.manual_path }}">{{ agent_box.manual_url }}</a></code>
+        {# Copy affordance, code-block convention: a small icon chip pinned
+           to the block's top-right corner (GitHub-style), not a wide button.
+           Ships [hidden] and is revealed by /static/js/copy.js — without JS
+           the phrase stays selectable text. The sr-only status span (outside
+           the button, role=status) announces "copiado" to screen readers. #}
+        <button
+          type="button"
+          class="copy-btn"
+          data-copy="#agent-phrase"
+          aria-label="copiar frase para o agente"
+          hidden
+        >
+          <svg class="icon-copy" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <rect x="5.5" y="5.5" width="8" height="8" rx="1"/>
+            <path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1"/>
+          </svg>
+          <svg class="icon-check" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M2.5 8.5l3.5 3.5 7-8"/>
+          </svg>
+        </button>
+        <span class="visually-hidden copy-state" role="status"></span>
+      </span>
     </p>
     <ol class="agent-steps">
       {% for step in agent_box.steps %}<li>{{ step }}</li>{% endfor %}

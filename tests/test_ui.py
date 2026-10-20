@@ -185,6 +185,7 @@ def agent_panel(ctx):
     assert 'href="/llms.txt"' in html
     # copy affordance ships hidden (no-JS safe): copy.js reveals it
     assert 'data-copy="#agent-phrase"' in html
+    assert 'aria-label="copiar frase para o agente"' in html
     assert re.search(r'class="copy-btn"[^>]*hidden', html)
 
 

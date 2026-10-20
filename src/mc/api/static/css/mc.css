@@ -417,50 +417,82 @@ body {
 }
 
 .agent-command {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: calc(var(--mc-rhythm) * 1);
+  text-align: center;
   margin: 0 0 calc(var(--mc-rhythm) * 2);
 }
 
-.agent-command code {
-  /* the paste-ready phrase sits on the darker deck readout, amber-trimmed */
+.command-wrap {
+  position: relative;
   display: inline-block;
   max-width: 100%;
+}
+
+.agent-command code {
+  /* the paste-ready phrase sits on the darker deck readout, amber-trimmed;
+     the right padding clears the corner copy chip */
+  display: block;
   text-align: left;
   overflow-wrap: anywhere;
   color: var(--mc-ink);
   background: var(--mc-ground);
   border: 1px solid var(--mc-line);
   border-radius: 2px;
-  padding: calc(var(--mc-rhythm) * 1.5) calc(var(--mc-rhythm) * 2);
+  padding: calc(var(--mc-rhythm) * 1.5) 2.75em calc(var(--mc-rhythm) * 1.5)
+    calc(var(--mc-rhythm) * 2);
 }
 
+/* the copy chip: code-block convention (GitHub-style) — a small icon pinned
+   to the block's top-right corner, ghost amber at rest, amber-filled when
+   hovered or copied. Always visible so touch needs no hover. */
 .copy-btn {
-  width: auto; /* Pico stretches buttons to 100% — this is a small chip */
-  font-family: var(--mc-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  position: absolute;
+  top: calc(var(--mc-rhythm) * 0.75);
+  right: calc(var(--mc-rhythm) * 0.75);
+  width: auto; /* Pico stretches buttons to 100% — this is a corner chip */
+  margin: 0;
+  padding: 3px;
+  line-height: 0;
   color: var(--mc-amber);
-  background: var(--mc-ground);
-  border: 1px solid var(--mc-amber);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 2px;
-  padding: calc(var(--mc-rhythm) * 1) calc(var(--mc-rhythm) * 1.5);
   cursor: pointer;
+  opacity: 0.85;
+}
+
+.copy-btn svg {
+  display: block;
+}
+
+.copy-btn .icon-check {
+  display: none;
 }
 
 .copy-btn:hover,
+.copy-btn:focus-visible,
 .copy-btn.copied {
-  /* inverted deck chip: amber fill, ground text (~7:1 both ways) */
+  opacity: 1;
   color: var(--mc-ground);
   background: var(--mc-amber);
+  border-color: var(--mc-amber);
+}
+
+.copy-btn.copied .icon-copy {
+  display: none;
+}
+
+.copy-btn.copied .icon-check {
+  display: block;
 }
 
 .copy-btn.failed {
-  color: var(--mc-ground);
-  background: var(--mc-ink-dim);
+  opacity: 1;
+  color: var(--mc-ink-dim);
+}
+
+.copy-btn:focus-visible {
+  outline: 1px solid var(--mc-amber);
+  outline-offset: 1px;
 }
 
 .agent-command a {

@@ -142,6 +142,7 @@ def test_landing_page_carries_agent_instructions(client):
     assert 'href="/llms.txt"' in html
     # copy affordance: hidden button revealed by /static/js/copy.js only
     assert 'data-copy="#agent-phrase"' in html
+    assert 'aria-label="copiar frase para o agente"' in html
     assert re.search(r'class="copy-btn"[^>]*hidden', html)
     # the human surface carries no endpoint jargon — agents get the full
     # recipe in /llms.txt and the render=json envelope instead
