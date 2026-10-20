@@ -174,6 +174,17 @@ def footer_freshness(ctx, date):
     assert f"acervo atualizado até {date}" in ctx["html"]
 
 
+@then("the page shows how to point an agent at Muriel")
+def agent_panel(ctx):
+    html = ctx["html"]
+    assert 'class="agent-note"' in html
+    assert "Fale com a Muriel" in html
+    # the paste-ready phrase points the agent at the machine-readable manual
+    assert "quando o eddie falou sobre ilha das américas?" in html
+    assert "https://muriel.eddieoz.com/llms.txt" in html
+    assert 'href="/llms.txt"' in html
+
+
 def test_no_external_cdn_requests(ctx):
     """Vendored assets only — the page must render fully offline."""
     html = ctx["client_http"].get("/").text

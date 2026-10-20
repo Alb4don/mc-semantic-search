@@ -16,3 +16,7 @@ Feature: Search page (HTML + htmx)
     Given the archive was last updated 2026-10-09
     When I open the search page
     Then the footer shows "acervo atualizado até 2026-10-09"
+
+  Scenario: The page teaches agents how to use it
+    Given I am on the search page
+    Then the page shows how to point an agent at Muriel

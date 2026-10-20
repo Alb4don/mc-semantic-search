@@ -39,3 +39,4 @@ transcripts/
 
 # Session tooling (agent plans, local-only)
 .zcode/
+.serena/

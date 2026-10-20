@@ -136,6 +136,18 @@ def search_with_limit(ctx, query, limit):
     )
 
 
+@when(parsers.parse('I ask the landing page for JSON with query "{query}"'))
+def landing_page_json(ctx, query):
+    ctx["response"] = TestClient(ctx["app"]).get(
+        "/", params={"query": query, "render": "json"}
+    )
+
+
+@when("I open the landing page as JSON without a query")
+def landing_page_json_manual(ctx):
+    ctx["response"] = TestClient(ctx["app"]).get("/", params={"render": "json"})
+
+
 @then(parsers.parse("the response is {code:d}"))
 def response_status(ctx, code):
     assert ctx["response"].status_code == code, ctx["response"].text
@@ -176,6 +188,30 @@ def empty_results(ctx):
 def freshness_block(ctx):
     body = ctx["response"].json()
     assert "freshness" in body and "last_update" in body["freshness"]
+
+
+@then("the body matches the render=json envelope")
+def agent_envelope(ctx):
+    body = ctx["response"].json()
+    assert set(body) == {"agent", "query", "took_ms", "freshness", "results"}
+    assert body["query"] == "bitcoin"
+    assert body["agent"]["name"] == "Muriel"
+    assert isinstance(body["took_ms"], int | float)
+    for result in body["results"]:
+        assert set(result) == RESULT_KEYS
+
+
+@then("the agent card describes the archive and its endpoints")
+def agent_card(ctx):
+    body = ctx["response"].json()
+    assert body["results"] == []  # no query → the manual, not a search
+    agent = body["agent"]
+    assert "Morning Crypto" in agent["role"]
+    steps = agent["how_to_search"]
+    assert any("render=json" in line for line in steps)
+    assert any("/search" in line for line in steps)
+    assert any("/llms.txt" in line for line in steps)
+    assert set(agent["result_fields"]) == RESULT_KEYS
 
 
 def test_verbatim_query_applies_quote_boost_via_api(tmp_path, monkeypatch):

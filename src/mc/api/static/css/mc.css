@@ -386,6 +386,77 @@ body {
   display: none;
 }
 
+/* ---------- caixa para agentes ---------- */
+/* The moltbook pattern, human side: a loud box that hands visitors the
+   paste-ready phrase for their agent. The technical manual stays out of
+   the way, in /llms.txt, where the agent actually reads it. */
+
+.agent-note {
+  border: 2px solid var(--mc-amber);
+  border-radius: 4px;
+  background: var(--mc-ground-2);
+  font-family: var(--mc-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  padding: calc(var(--mc-rhythm) * 3);
+  margin-top: calc(var(--mc-rhythm) * 6);
+}
+
+.agent-title {
+  color: var(--mc-amber);
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  margin: 0 0 calc(var(--mc-rhythm) * 2);
+}
+
+.agent-lead {
+  color: var(--mc-ink);
+  text-align: center;
+  margin: 0 0 calc(var(--mc-rhythm) * 2);
+}
+
+.agent-command {
+  text-align: center;
+  margin: 0 0 calc(var(--mc-rhythm) * 2);
+}
+
+.agent-command code {
+  /* the paste-ready phrase sits on the darker deck readout, amber-trimmed */
+  display: inline-block;
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+  color: var(--mc-ink);
+  background: var(--mc-ground);
+  border: 1px solid var(--mc-line);
+  border-radius: 2px;
+  padding: calc(var(--mc-rhythm) * 1.5) calc(var(--mc-rhythm) * 2);
+}
+
+.agent-command a {
+  color: var(--mc-amber);
+  text-decoration: underline;
+}
+
+.agent-command a:hover {
+  color: var(--mc-ink);
+}
+
+.agent-steps {
+  color: var(--mc-ink-dim);
+  padding-left: calc(var(--mc-rhythm) * 3);
+  margin: 0;
+}
+
+.agent-steps li {
+  margin: 0 0 calc(var(--mc-rhythm) * 0.5);
+}
+
+.agent-steps li::marker {
+  color: var(--mc-amber);
+}
+
 /* ---------- colophon ---------- */
 
 .colophon {

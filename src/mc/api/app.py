@@ -14,11 +14,16 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from qdrant_client import QdrantClient
 
+from mc.api import agent as agent_docs
 from mc.api.health import health_snapshot
 from mc.config import (
     COLLECTION_NAME,
@@ -48,6 +53,22 @@ MAX_QUERY_LENGTH = 512
 # alphanumeric+dash/underscore; anything else is never rendered/linked.
 _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 
+# Keys every search result exposes — /search and the render=json envelope
+# share one contract so agents never meet two shapes.
+_SEARCH_KEYS = (
+    "title",
+    "url",
+    "start_seconds",
+    "date",
+    "episode",
+    "channel",
+    "snippet",
+    "score",
+)
+
+# DoS guard for the render switch — only the literal value "json" means JSON.
+MAX_RENDER_LENGTH = 16
+
 TEMPLATES = Jinja2Templates(
     directory=Path(__file__).parent / "templates", autoescape=True
 )
@@ -76,6 +97,24 @@ def _safe_url(url: str | None, video_id: str | None) -> str:
     if video_id and _VIDEO_ID_RE.fullmatch(video_id):
         return f"https://www.youtube.com/watch?v={video_id}"
     return ""
+
+
+def _base_url(request: Request) -> str:
+    """Origin for the agent-facing docs, honoring reverse-proxy headers.
+
+    The host header is only ever echoed back inside JSON/text — never into
+    HTML — and an absent host falls back to relative endpoint recipes.
+    """
+    raw_scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    scheme = raw_scheme.split(",")[0].strip().lower()
+    if scheme not in ("http", "https"):
+        scheme = "https"
+    host = (request.headers.get("host") or request.url.netloc or "").strip()
+    return f"{scheme}://{host}" if host else ""
+
+
+def _search_results(results: list[dict]) -> list[dict]:
+    return [{key: r[key] for key in _SEARCH_KEYS} for r in results]
 
 
 def _video_result(result: SearchResult, query: str) -> dict:
@@ -194,22 +233,7 @@ def create_app(
             "query": query,
             "took_ms": took_ms,
             "freshness": _freshness(),
-            "results": [
-                {
-                    key: r[key]
-                    for key in (
-                        "title",
-                        "url",
-                        "start_seconds",
-                        "date",
-                        "episode",
-                        "channel",
-                        "snippet",
-                        "score",
-                    )
-                }
-                for r in results
-            ],
+            "results": _search_results(results),
         }
 
     @app.get("/results", response_class=HTMLResponse)
@@ -227,9 +251,26 @@ def create_app(
     def search_page(
         request: Request,
         query: str = Query(default="", max_length=MAX_QUERY_LENGTH),
-    ) -> HTMLResponse:
+        render: str = Query(default="", max_length=MAX_RENDER_LENGTH),
+    ):
         stripped = query.strip()
+        started = time.perf_counter()
         results = _video_results(query, MAX_SEARCH_LIMIT) if stripped else []
+        if render.strip().lower() == "json":
+            # The agent door (moltbook pattern): the landing page answers in
+            # machine-readable form. No query → Muriel's self-description;
+            # a query → the /search envelope plus the agent block, so every
+            # JSON response is self-describing.
+            took_ms = (time.perf_counter() - started) * 1000
+            return JSONResponse(
+                {
+                    "agent": agent_docs.manual(_base_url(request)),
+                    "query": stripped,
+                    "took_ms": took_ms,
+                    "freshness": _freshness(),
+                    "results": _search_results(results),
+                }
+            )
         return TEMPLATES.TemplateResponse(
             request=request,
             name="search.html",
@@ -238,8 +279,13 @@ def create_app(
                 "results": results,
                 "freshness_line": _freshness_line(_freshness()["last_update"]),
                 "stats": "",
+                "agent_box": agent_docs.landing_box(),
             },
         )
+
+    @app.get("/llms.txt", response_class=PlainTextResponse)
+    def llms_txt_endpoint(request: Request) -> PlainTextResponse:
+        return PlainTextResponse(agent_docs.llms_txt(_base_url(request)))
 
     @app.get("/health")
     def health_endpoint() -> JSONResponse:

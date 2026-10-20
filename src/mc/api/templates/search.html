@@ -93,6 +93,22 @@
     {% endif %}
   </main>
 
+  {# The moltbook pattern, human side: the landing page teaches visitors how
+     to direct their agent at Muriel — one paste-ready phrase pointing at
+     /llms.txt, the machine-readable manual. No endpoint jargon here: an
+     agent that lands on this page follows the link and gets the full
+     technical card (plus render=json) there. #}
+  <section class="agent-note" aria-labelledby="agent-note-title">
+    <h2 class="agent-title" id="agent-note-title">{{ agent_box.title }}</h2>
+    <p class="agent-lead">{{ agent_box.lead }}</p>
+    <p class="agent-command">
+      <code>{{ agent_box.question }} <a href="{{ agent_box.manual_path }}">{{ agent_box.manual_url }}</a></code>
+    </p>
+    <ol class="agent-steps">
+      {% for step in agent_box.steps %}<li>{{ step }}</li>{% endfor %}
+    </ol>
+  </section>
+
   <footer class="colophon">
     <p>{{ freshness_line }}</p>
     <p class="colophon-note">muriel é a bibliotecária que encontra tudo que foi dito no morning crypto.</p>

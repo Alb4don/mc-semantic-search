@@ -28,3 +28,16 @@ Feature: GET /search JSON API (Story 4.5)
     Given the search service has no reachable qdrant
     When I search for "bitcoin"
     Then the response is 503
+
+  Scenario: The landing page answers in JSON when asked
+    Given a seeded archive of 55 transcript chunks
+    When I ask the landing page for JSON with query "bitcoin"
+    Then the response is 200
+    And the body matches the render=json envelope
+    And every result snippet highlights the query word
+
+  Scenario: Muriel introduces herself to agents
+    Given a seeded archive of 55 transcript chunks
+    When I open the landing page as JSON without a query
+    Then the response is 200
+    And the agent card describes the archive and its endpoints

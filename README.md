@@ -11,6 +11,8 @@ when their wording paraphrases the transcript.
 - Hybrid search — dense `multilingual-e5-small` (384-dim) + sparse BM25, fused
   natively by Qdrant (RRF)
 - Quote-aware ranking boost and highlighted snippets in result fragments
+- Agent-friendly surface — `?render=json` envelope and a `/llms.txt` manual,
+  advertised on the landing page itself (moltbook pattern)
 - Two ingestion modes: **Mode A** (server self-update via cron) and **Mode B**
   (local scrape + push, fallback when the server IP gets bot-blocked)
 - Ingestion bookkeeping in SQLite (`state/ingest.db`) — never on the search path
@@ -232,11 +234,34 @@ dedupe), so a retried run never duplicates data.
 
 | Endpoint | What |
 |---|---|
-| `GET /` | Search UI (HTML); `?query=` pre-fills the box |
+| `GET /` | Search UI (HTML); `?query=` pre-fills the box; `?render=json` returns the agent envelope instead |
 | `GET /search?query=…&limit=…` | JSON results |
 | `GET /results?query=…` | HTML result fragment (htmx) |
+| `GET /llms.txt` | Agent manual (llmstxt.org-style plain text) |
 | `GET /health` | JSON probe: qdrant reachability + ingest freshness |
 | `GET /static/*` | Static assets |
+
+### Agents (moltbook pattern)
+
+Muriel is agent-friendly: humans teach their agents to use the site — a
+"Fale com a Muriel" box on the landing page hands visitors one paste-ready
+phrase that points any agent at the machine-readable manual:
+
+```text
+quando o eddie falou sobre ilha das américas? https://muriel.eddieoz.com/llms.txt
+```
+
+The agent reads `/llms.txt`, learns the endpoints, and calls the JSON API.
+Every `render=json` response is also self-describing.
+
+- `GET /?query=TERMO&render=json` — the landing page answers in JSON: same
+  envelope as `/search` plus an `agent` block (endpoints, params, result
+  fields). Without a query it returns Muriel's self-description card.
+- `GET /llms.txt` — the same manual as plain text for crawlers/agents.
+- `GET /search?query=TERMO&limit=10` — the plain JSON API (unchanged).
+
+`render` is case-insensitive and only the literal value `json` switches the
+format; anything else (or its absence) renders HTML as before.
 
 Constraints: `query` 1–512 chars, `limit` default 10 / max 50. The engine
 clamps both again internally, so direct callers cannot bypass the caps.
