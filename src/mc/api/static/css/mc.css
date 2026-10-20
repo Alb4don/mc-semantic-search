@@ -417,7 +417,11 @@ body {
 }
 
 .agent-command {
-  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--mc-rhythm) * 1);
   margin: 0 0 calc(var(--mc-rhythm) * 2);
 }
 
@@ -432,6 +436,31 @@ body {
   border: 1px solid var(--mc-line);
   border-radius: 2px;
   padding: calc(var(--mc-rhythm) * 1.5) calc(var(--mc-rhythm) * 2);
+}
+
+.copy-btn {
+  width: auto; /* Pico stretches buttons to 100% — this is a small chip */
+  font-family: var(--mc-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--mc-amber);
+  background: var(--mc-ground);
+  border: 1px solid var(--mc-amber);
+  border-radius: 2px;
+  padding: calc(var(--mc-rhythm) * 1) calc(var(--mc-rhythm) * 1.5);
+  cursor: pointer;
+}
+
+.copy-btn:hover,
+.copy-btn.copied {
+  /* inverted deck chip: amber fill, ground text (~7:1 both ways) */
+  color: var(--mc-ground);
+  background: var(--mc-amber);
+}
+
+.copy-btn.failed {
+  color: var(--mc-ground);
+  background: var(--mc-ink-dim);
 }
 
 .agent-command a {

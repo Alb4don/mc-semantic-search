@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/mc.css">
   <script src="/static/js/htmx.min.js" defer></script>
   <script src="/static/js/alpine.min.js" defer></script>
+  <script src="/static/js/copy.js" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -102,7 +103,19 @@
     <h2 class="agent-title" id="agent-note-title">{{ agent_box.title }}</h2>
     <p class="agent-lead">{{ agent_box.lead }}</p>
     <p class="agent-command">
-      <code>{{ agent_box.question }} <a href="{{ agent_box.manual_path }}">{{ agent_box.manual_url }}</a></code>
+      <code id="agent-phrase">{{ agent_box.question }} <a href="{{ agent_box.manual_path }}">{{ agent_box.manual_url }}</a></code>
+      {# Copy affordance for the paste-ready phrase. Ships [hidden] and is
+         revealed by /static/js/copy.js — without JS the page loses nothing,
+         the phrase stays selectable text. #}
+      <button
+        type="button"
+        class="copy-btn"
+        data-copy="#agent-phrase"
+        data-label="copiar"
+        data-copied-label="copiado ✓"
+        aria-live="polite"
+        hidden
+      >copiar</button>
     </p>
     <ol class="agent-steps">
       {% for step in agent_box.steps %}<li>{{ step }}</li>{% endfor %}

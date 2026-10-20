@@ -140,6 +140,9 @@ def test_landing_page_carries_agent_instructions(client):
     assert "quando o eddie falou sobre ilha das américas?" in html
     assert "https://muriel.eddieoz.com/llms.txt" in html
     assert 'href="/llms.txt"' in html
+    # copy affordance: hidden button revealed by /static/js/copy.js only
+    assert 'data-copy="#agent-phrase"' in html
+    assert re.search(r'class="copy-btn"[^>]*hidden', html)
     # the human surface carries no endpoint jargon — agents get the full
     # recipe in /llms.txt and the render=json envelope instead
     assert "SEU_TERMO" not in html

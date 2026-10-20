@@ -183,6 +183,9 @@ def agent_panel(ctx):
     assert "quando o eddie falou sobre ilha das américas?" in html
     assert "https://muriel.eddieoz.com/llms.txt" in html
     assert 'href="/llms.txt"' in html
+    # copy affordance ships hidden (no-JS safe): copy.js reveals it
+    assert 'data-copy="#agent-phrase"' in html
+    assert re.search(r'class="copy-btn"[^>]*hidden', html)
 
 
 def test_no_external_cdn_requests(ctx):
@@ -193,6 +196,7 @@ def test_no_external_cdn_requests(ctx):
     for asset in (
         "/static/js/htmx.min.js",
         "/static/js/alpine.min.js",
+        "/static/js/copy.js",
         "/static/css/pico.min.css",
         "/static/css/mc.css",
     ):
