@@ -89,6 +89,10 @@ class StateStore:
     def count_processed(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM processed").fetchone()[0]
 
+    def processed_ids(self) -> list[str]:
+        rows = self._conn.execute("SELECT video_id FROM processed").fetchall()
+        return [row[0] for row in rows]
+
     # --- archive stats (Story 6.2) -------------------------------------------
     def record_video_stats(
         self,
@@ -136,6 +140,14 @@ class StateStore:
             "last_episode": last[0] if last else None,
             "last_episode_date": last[1] if last else None,
         }
+
+    def video_duration(self, video_id: str) -> int | None:
+        """The stored duration for one video (Story 6.4 backfill resumability):
+        None when the video is absent or its duration is still unknown."""
+        row = self._conn.execute(
+            "SELECT duration FROM video_stats WHERE video_id = ?", (video_id,)
+        ).fetchone()
+        return row[0] if row else None
 
     # --- run success bookkeeping (NFR-4) -------------------------------------
     def record_success(self, run_type: str) -> None:

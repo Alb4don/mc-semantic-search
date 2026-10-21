@@ -20,11 +20,26 @@ def _run_cli(*args):
 def test_help_lists_all_subcommands():
     result = _run_cli("--help")
     assert result.returncode == 0
-    for cmd in ["backfill", "update", "push", "apply", "reindex", "serve"]:
+    for cmd in [
+        "backfill",
+        "update",
+        "push",
+        "apply",
+        "reindex",
+        "serve",
+        "stats-backfill",
+    ]:
         assert cmd in result.stdout, f"missing subcommand {cmd}"
 
 
 def test_unknown_subcommand_exits_nonzero_with_usage():
     result = _run_cli("definitely-not-a-command")
+    assert result.returncode != 0
+    assert "usage" in (result.stdout + result.stderr).lower()
+
+
+def test_stats_backfill_rejects_unknown_flag():
+    """Story 6.4: a bad flag on a real subcommand still exits non-zero."""
+    result = _run_cli("stats-backfill", "--not-a-real-flag")
     assert result.returncode != 0
     assert "usage" in (result.stdout + result.stderr).lower()

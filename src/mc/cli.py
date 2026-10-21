@@ -38,6 +38,17 @@ def _cmd_apply(args: argparse.Namespace) -> int:
     return run_apply()
 
 
+def _cmd_stats_backfill(args: argparse.Namespace) -> int:
+    from mc.ingest.stats_backfill import run_stats_backfill
+
+    report = run_stats_backfill(
+        fetch_missing=args.fetch_missing,
+        limit=args.limit,
+    )
+    print(report["summary"], end="")
+    return 0
+
+
 def _cmd_reindex(args: argparse.Namespace) -> int:
     from mc.ingest.reindex import run_reindex
 
@@ -88,6 +99,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("apply", help="embed + upsert queued increments (Mode B server)")
     p.set_defaults(func=_cmd_apply)
+
+    p = sub.add_parser(
+        "stats-backfill",
+        help="backfill archive stats for already-indexed videos (no fetch by default)",
+    )
+    p.add_argument(
+        "--fetch-missing",
+        action="store_true",
+        help="yt-dlp --dump-single-json for videos still lacking a duration "
+        "(upgrades the cache once; rate-limited, resumable)",
+    )
+    p.add_argument("--limit", type=int, default=None, help="cap videos considered this run")
+    p.set_defaults(func=_cmd_stats_backfill)
 
     p = sub.add_parser("reindex", help="rebuild into a new collection and swap alias")
     p.add_argument("--model", required=True, help="dense model id to reindex with")
