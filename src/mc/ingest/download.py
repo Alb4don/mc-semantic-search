@@ -1,8 +1,6 @@
 """Transcript download (Story 3.2): yt-dlp subtitle fetch with retry logic.
 
-Ports the proven v3 pipeline logic from
-``extras/import_transcriptions_v3.py::download_transcript_with_ytdlp``
-(``/home/eddieoz/Projects/git/live_gerard``) into the mc package:
+Ports the proven v3 pipeline logic into the mc package:
 
 - language priority ['pt', 'pt-BR', 'en', 'en-US'], one language per attempt;
 - json3 subtitle format; parsed transcript saved as ``<video_id>.srt`` (v3
@@ -20,12 +18,17 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+#: YouTube video ids are 11 chars of [A-Za-z0-9_-]; the wider bound tolerates
+#: future id shapes while still rejecting path separators and traversal.
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 #: Language priority: Portuguese first, then English (v3 semantics).
 LANGUAGE_PRIORITY: tuple[str, ...] = ("pt", "pt-BR", "en", "en-US")
@@ -168,6 +171,10 @@ def download_transcript(
     Download failures other than missing subtitles propagate as exceptions
     so the caller (``run_update``) can classify them (e.g. stale cookies).
     """
+    if not _VIDEO_ID_RE.fullmatch(video_id):
+        # Defense in depth: this function builds <transcripts_dir>/<id>.srt,
+        # so an unvalidated id (e.g. "../x") would write outside the dir.
+        raise DownloadError(f"invalid video id: {video_id!r}")
     cookies = Path(cookies_path)
     if not cookies.exists():
         raise DownloadError(

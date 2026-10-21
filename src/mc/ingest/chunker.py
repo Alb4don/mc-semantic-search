@@ -1,7 +1,7 @@
 """Chunker (Story 3.3): 30 segments per chunk, timestamp = first segment.
 
-Rules ported 1:1 from extras/import_transcriptions_v3.py so new content is
-consistent with the archive:
+Rules ported 1:1 from the v3 import script so new content is consistent
+with the archive:
 - flush every `size` segments (i % size == 0 with a non-empty buffer)
 - chunk timestamp = first segment's start (int truncation, v3 semantics)
 - url = https://www.youtube.com/watch?v=<id>&t=<int(first start)>
@@ -10,11 +10,7 @@ consistent with the archive:
 
 from __future__ import annotations
 
-import logging
-
 from mc.ingest.models import Chunk
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = 30
 

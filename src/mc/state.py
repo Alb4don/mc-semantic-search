@@ -55,11 +55,18 @@ class StateStore:
             # A locked/busy db is transient contention, not corruption —
             # recreating here would wipe all bookkeeping (review fix).
             raise
-        except sqlite3.DatabaseError:
+        except sqlite3.DatabaseError as exc:
+            # Only a genuinely unreadable file ("not a database") warrants a
+            # wipe; any other DatabaseError is raised so a transient fault
+            # can't silently destroy the bookkeeping. The corrupt file is
+            # preserved (renamed) rather than deleted, so it can be inspected.
+            if "not a database" not in str(exc):
+                raise
             logger.warning(
-                "state db %s is corrupt — recreating from scratch", self.path
+                "state db %s is not a valid database — preserving it and "
+                "recreating from scratch", self.path
             )
-            self.path.unlink(missing_ok=True)
+            self.path.replace(self.path.with_suffix(".corrupt"))
             self._conn = self._connect()
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
@@ -174,13 +181,6 @@ class StateStore:
             "SELECT value FROM meta WHERE key = ?", (f"last_success:{run_type}",)
         ).fetchone()
         return row[0] if row else None
-
-    # --- push bookkeeping (Story 3.6) -----------------------------------------
-    def mark_pushed(self, video_id: str) -> None:
-        self.record_key(f"pushed:{video_id}", _now_iso())
-
-    def is_pushed(self, video_id: str) -> bool:
-        return self.get_key(f"pushed:{video_id}") is not None
 
     # --- generic meta ---------------------------------------------------------
     def record_key(self, key: str, value: str) -> None:

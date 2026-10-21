@@ -12,6 +12,7 @@ import re
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import (
@@ -157,9 +158,16 @@ def _freshness_line(last_update: str | None) -> str:
 
 
 def _safe_url(url: str | None, video_id: str | None) -> str:
-    """Only https:// URLs survive a poisoned-index payload (stored XSS)."""
+    """Only https:// YouTube URLs survive a poisoned-index payload.
+
+    Restricting the host to YouTube means a poisoned collection (or a Mode B
+    queue record) can't make results link to an arbitrary https:// site —
+    phishing, not just stored XSS.
+    """
     if url and url.startswith("https://"):
-        return url
+        host = urlparse(url).netloc.lower()
+        if host in ("www.youtube.com", "youtube.com", "youtu.be"):
+            return url
     if video_id and _VIDEO_ID_RE.fullmatch(video_id):
         return f"https://www.youtube.com/watch?v={video_id}"
     return ""

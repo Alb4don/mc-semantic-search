@@ -40,7 +40,9 @@ def build_shipper(dest: str) -> Callable[[Path], None]:
     """Return a callable shipping a file to `dest` via rsync (real transport)."""
 
     def ship(path: Path) -> None:
-        subprocess.run(["rsync", *_RSYNC_FLAGS, str(path), dest], check=True)
+        # "--" terminates option parsing so a dest beginning with "-" (e.g.
+        # "--rsh=...") is treated as a path, not an rsync option.
+        subprocess.run(["rsync", *_RSYNC_FLAGS, "--", str(path), dest], check=True)
 
     return ship
 

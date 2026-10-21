@@ -84,8 +84,11 @@ def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
         try:
             url = record["url"]
             text = record["text"]
+            # Collapse whitespace so a queue record can't forge log lines or
+            # ignore-list entries with an embedded newline in video_id.
+            video_id = " ".join(str(record["video_id"]).split())
             chunk = Chunk(
-                video_id=str(record["video_id"]),
+                video_id=video_id,
                 text=text,
                 url=url,
                 start_seconds=int(record["start_seconds"]),

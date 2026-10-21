@@ -54,4 +54,3 @@ CHANNELS = tuple(
     if line.strip()
 )
 COOKIES_PATH = os.environ.get("MC_COOKIES_PATH", str(PROJECT_ROOT / "cookies.txt"))
-NOTIFY_WEBHOOK = os.environ.get("NOTIFY_WEBHOOK", "")

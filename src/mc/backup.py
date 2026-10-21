@@ -45,6 +45,10 @@ def default_client(url: str | None = None) -> QdrantClient:
 
 def snapshot_dir(collection: str, snapshots_path: Path | None = None) -> Path:
     """Per-collection snapshot dir (qdrant nests ``<snapshots>/<collection>/``)."""
+    # A --collection value containing "/" or ".." would escape the snapshots
+    # base dir; collection names are flat identifiers.
+    if "/" in collection or ".." in collection or not collection:
+        raise ValueError(f"invalid collection name: {collection!r}")
     return Path(snapshots_path or SNAPSHOTS_DIR) / collection
 
 

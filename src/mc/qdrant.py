@@ -222,9 +222,3 @@ def _point_id(video_id: str, start_seconds: int) -> int:
     """Stable point id: same video+timestamp → same id (idempotent upserts)."""
     digest = uuid.uuid5(uuid.NAMESPACE_URL, f"{video_id}:{start_seconds}")
     return int(digest.hex[:16], 16)
-
-
-def delete_by_video(client: QdrantClient, name: str, video_id: str) -> None:
-    ids = _existing_point_ids(client, name, video_id)
-    if ids:
-        client.delete(collection_name=name, points_selector=ids)

@@ -12,8 +12,9 @@ fail() {
 }
 
 # (1) filename check: any staged path containing "cookies" (case-insensitive)
-#     — catches copies/renames of www.youtube.com_cookies.txt too.
-if git diff --cached --name-only | grep -i cookies > /dev/null; then
+#     — catches copies/renames of www.youtube.com_cookies.txt too. docs/ is
+#     excluded so the tracked docs/tasks/cookies.md stays editable.
+if git diff --cached --name-only | grep -iv '^docs/' | grep -i cookies > /dev/null; then
     fail
 fi
 

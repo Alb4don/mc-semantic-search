@@ -216,6 +216,7 @@ def test_build_shipper_runs_rsync(monkeypatch, tmp_path):
         "rsync",
         "-a",
         "--checksum",
+        "--",
         str(tmp_path / "2026-10-10.jsonl"),
         "server:~/mc/queue/",
     ]
