@@ -179,8 +179,14 @@ agents as `archive_status` in the `?render=json` envelope and in `/llms.txt`.
 `mc update` (Mode A) and `mc apply` (Mode B) maintain the rows as a side
 effect of runs that already exist; the one-off `mc stats-backfill` bootstraps
 the existing archive from the local transcripts cache (no yt-dlp fetch by
-default — see the deploy runbook). An empty or unreadable table simply hides
-the block; the page never breaks on it.
+default — see the deploy runbook). That command also **repairs the Qdrant
+payloads**: points indexed before the episode/date enrichment existed show
+`ep —` / `sem data` in results, and the backfill writes the missing
+episode/date/duration back into the payload — payload-only, no re-embedding,
+only where the field is empty (`--no-index` skips it). With `--fetch-missing`,
+a video missing episode/date is fetched once via yt-dlp even when its duration
+is already known — that is what old pre-enrichment points need. An empty or
+unreadable table simply hides the block; the page never breaks on it.
 
 ## Configuration
 

@@ -39,11 +39,20 @@ def _cmd_apply(args: argparse.Namespace) -> int:
 
 
 def _cmd_stats_backfill(args: argparse.Namespace) -> int:
-    from mc.ingest.stats_backfill import run_stats_backfill
+    from qdrant_client import QdrantClient
 
+    from mc.config import QDRANT_URL
+    from mc.ingest.stats_backfill import run_stats_backfill
+    from mc.qdrant import client_kwargs
+
+    # Index repair is ON by default — that is the point of the command: it also
+    # fills the episode/date old points were indexed without, so the result
+    # cards show them. --no-index keeps the run from touching Qdrant at all.
+    client = None if args.no_index else QdrantClient(url=QDRANT_URL, **client_kwargs(timeout=60))
     report = run_stats_backfill(
         fetch_missing=args.fetch_missing,
         limit=args.limit,
+        client=client,
     )
     # summary() has no trailing newline; a plain print terminates the line so
     # the next shell prompt doesn't run into the numbers.
@@ -104,13 +113,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "stats-backfill",
-        help="backfill archive stats for already-indexed videos (no fetch by default)",
+        help="backfill archive facts for already-indexed videos and repair "
+        "their Qdrant payloads (no fetch by default)",
     )
     p.add_argument(
         "--fetch-missing",
         action="store_true",
-        help="yt-dlp --dump-single-json for videos still lacking a duration "
+        help="yt-dlp --dump-single-json for videos still lacking any fact — "
+        "a duration or the episode/date of old pre-enrichment videos "
         "(upgrades the cache once; rate-limited, resumable)",
+    )
+    p.add_argument(
+        "--no-index",
+        action="store_true",
+        help="only write the stats table; do not repair the Qdrant payloads "
+        "(the episode/date old points were indexed without)",
     )
     p.add_argument("--limit", type=int, default=None, help="cap videos considered this run")
     p.set_defaults(func=_cmd_stats_backfill)

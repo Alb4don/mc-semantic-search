@@ -141,13 +141,24 @@ class StateStore:
             "last_episode_date": last[1] if last else None,
         }
 
+    def video_facts(self, video_id: str) -> dict:
+        """Every stored archive fact for one video (Story 6.4 backfill): the
+        row's ``duration``/``episode``/``date``, each ``None`` when still
+        unknown — and all three ``None`` when the video has no row at all.
+        Lets the backfill tell which fields are still missing, so a row that
+        already has a duration still gains its episode/date."""
+        row = self._conn.execute(
+            "SELECT duration, episode, date FROM video_stats WHERE video_id = ?",
+            (video_id,),
+        ).fetchone()
+        if row is None:
+            return {"duration": None, "episode": None, "date": None}
+        return {"duration": row[0], "episode": row[1], "date": row[2]}
+
     def video_duration(self, video_id: str) -> int | None:
         """The stored duration for one video (Story 6.4 backfill resumability):
         None when the video is absent or its duration is still unknown."""
-        row = self._conn.execute(
-            "SELECT duration FROM video_stats WHERE video_id = ?", (video_id,)
-        ).fetchone()
-        return row[0] if row else None
+        return self.video_facts(video_id)["duration"]
 
     # --- run success bookkeeping (NFR-4) -------------------------------------
     def record_success(self, run_type: str) -> None:
