@@ -40,3 +40,8 @@ Feature: Search page (HTML + htmx)
     Given the state store raises on stats reads
     When I open the search page
     Then the page still returns 200 with the search console and agent note intact
+
+  Scenario: Agents read the same status
+    Given the archive has 3556 catalogued videos totalling 197342 seconds
+    When I request "/" with render=json
+    Then the envelope includes "archive_status" with seconds 197342 and videos 3556

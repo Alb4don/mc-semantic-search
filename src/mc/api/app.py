@@ -127,6 +127,24 @@ def _format_archive_status(raw: dict) -> dict:
     return stats
 
 
+def _raw_archive_status(raw: dict) -> dict:
+    """Machine-readable archive numbers for the ``render=json`` envelope
+    (Story 6.6): raw ints/floats, derived stats rounded to 2 decimals, and
+    ``None`` (JSON ``null``) for anything unknown. One source of truth with
+    the HTML surface — the same ``archive_stats()`` dict.
+    """
+    seconds = raw.get("seconds")
+    return {
+        "videos": raw.get("videos"),
+        "seconds": seconds,
+        "minutes": round(seconds / 60, 2) if seconds is not None else None,
+        "hours": round(seconds / 3600, 2) if seconds is not None else None,
+        "days": round(seconds / 86400, 2) if seconds is not None else None,
+        "last_episode": raw.get("last_episode"),
+        "last_episode_date": raw.get("last_episode_date"),
+    }
+
+
 def _freshness_line(last_update: str | None) -> str:
     """Portuguese archive-freshness line shown in the footer/empty state."""
     if not last_update:
@@ -258,6 +276,15 @@ def create_app(
         except Exception:  # noqa: BLE001 — stats must never break the page
             return {}
 
+    def _raw_archive_stats() -> dict:
+        # Raw numbers for the render=json envelope; same isolation as above
+        # so a broken stats store yields nulls, never a 500 (Story 6.6).
+        try:
+            with _state() as store:
+                return _raw_archive_status(store.archive_stats())
+        except Exception:  # noqa: BLE001 — stats must never break the API
+            return _raw_archive_status({})
+
     def _video_results(query: str, effective_limit: int) -> list[dict]:
         try:
             results: list[SearchResult] = run_search(
@@ -322,6 +349,7 @@ def create_app(
                     "query": stripped,
                     "took_ms": took_ms,
                     "freshness": _freshness(),
+                    "archive_status": _raw_archive_stats(),
                     "results": _search_results(results),
                 }
             )

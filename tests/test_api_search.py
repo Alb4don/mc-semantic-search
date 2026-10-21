@@ -193,7 +193,14 @@ def freshness_block(ctx):
 @then("the body matches the render=json envelope")
 def agent_envelope(ctx):
     body = ctx["response"].json()
-    assert set(body) == {"agent", "query", "took_ms", "freshness", "results"}
+    assert set(body) == {
+        "agent",
+        "query",
+        "took_ms",
+        "freshness",
+        "archive_status",
+        "results",
+    }
     assert body["query"] == "bitcoin"
     assert body["agent"]["name"] == "Muriel"
     assert isinstance(body["took_ms"], int | float)

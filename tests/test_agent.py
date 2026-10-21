@@ -53,7 +53,14 @@ def test_render_json_with_query_matches_search_contract(client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
-    assert set(body) == {"agent", "query", "took_ms", "freshness", "results"}
+    assert set(body) == {
+        "agent",
+        "query",
+        "took_ms",
+        "freshness",
+        "archive_status",
+        "results",
+    }
     assert body["query"] == "bitcoin"
     assert isinstance(body["took_ms"], int | float)
     assert "last_update" in body["freshness"]
@@ -130,6 +137,71 @@ def test_llms_txt_sections_are_canonical_link_lists(client):
 def test_llms_txt_honors_proxy_scheme(client):
     response = client.get("/llms.txt", headers={"x-forwarded-proto": "https"})
     assert "https://testserver/llms.txt" in response.text
+
+
+@pytest.fixture
+def stats_client(tmp_path, monkeypatch) -> TestClient:
+    """A client whose state store carries the full archive numbers:
+    3556 videos totalling 197342 seconds, last episode #971 (Story 6.6).
+    run_search is faked like the ``client`` fixture so the with-query
+    envelope path doesn't need a live Qdrant."""
+    monkeypatch.setattr(
+        app_module,
+        "run_search",
+        lambda *args, **kwargs: [
+            SearchResult(
+                video_id="video000001",
+                text="o bitcoin reagiu ao boato do dia",
+                url="https://www.youtube.com/watch?v=video000001&t=30",
+                start_seconds=30,
+                date="2026-01-01",
+                episode="1035",
+                channel="mc",
+                score=1.0,
+            )
+        ],
+    )
+    state = StateStore(tmp_path / "ingest.db")
+    per, count = 50, 3556
+    for i in range(count - 1):
+        state.record_video_stats(f"sv{i:06d}", duration=per)
+    state.record_video_stats(
+        "sv-last",
+        duration=197342 - per * (count - 1),
+        episode=971,
+        date="2026-10-20",
+    )
+    return TestClient(create_app(client=object(), state=state))
+
+
+def test_render_json_includes_archive_status(stats_client):
+    """The agent envelope carries the raw archive numbers (Story 6.6)."""
+    status = stats_client.get(
+        "/", params={"query": "bitcoin", "render": "json"}
+    ).json()["archive_status"]
+    assert status["videos"] == 3556
+    assert status["seconds"] == 197342
+    assert status["minutes"] == round(197342 / 60, 2)
+    assert status["hours"] == round(197342 / 3600, 2)
+    assert status["days"] == round(197342 / 86400, 2)
+    assert status["last_episode"] == 971
+    assert status["last_episode_date"] == "2026-10-20"
+
+
+def test_render_json_unknown_stats_are_null(client):
+    """A fresh archive exposes 0 videos and null for every derived stat."""
+    status = client.get("/", params={"render": "json"}).json()["archive_status"]
+    assert status["videos"] == 0
+    assert status["seconds"] is None
+    assert status["minutes"] is None
+    assert status["hours"] is None
+    assert status["days"] is None
+    assert status["last_episode"] is None
+    assert status["last_episode_date"] is None
+
+
+def test_llms_txt_mentions_archive_status(client):
+    assert "archive_status" in client.get("/llms.txt").text
 
 
 def test_landing_page_carries_agent_instructions(client):

@@ -129,5 +129,11 @@ def llms_txt(base_url: str | None = None) -> str:
             f"- [score]({envelope}): relevância (maior = melhor)",
             f"- [como assistir]({envelope}): abra url e avance para start_seconds",
             "",
+            "## Status do acervo",
+            "",
+            f"- [archive_status]({envelope}): números do acervo — vídeos, "
+            "segundos, minutos, horas, dias e o último episódio (null quando "
+            "desconhecido)",
+            "",
         ]
     )

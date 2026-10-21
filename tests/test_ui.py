@@ -266,8 +266,13 @@ def archive_has_videos_and_seconds(ctx):
     total, count, per = 197342, 3556, 50
     for i in range(count - 1):
         state.record_video_stats(f"statvid{i:06d}", duration=per)
-    ctx["last_video"] = "statvid-last"
+    # record the final video here too, so this given stands alone with exactly
+    # 3556 videos / 197342s (the "Agents read the same status" scenario uses it
+    # without last_episode_fact). last_episode_fact then upgrades this same
+    # final row with episode/date — idempotent, count unchanged.
+    ctx["last_video"] = f"statvid{count - 1:06d}"
     ctx["remainder"] = total - per * (count - 1)
+    state.record_video_stats(ctx["last_video"], duration=ctx["remainder"])
 
 
 @given(parsers.parse("the last episode loaded is #{episode} from {date}"))
@@ -327,3 +332,21 @@ def page_intact_on_broken_stats(ctx):
     assert ctx["response"].status_code == 200
     assert 'class="console"' in ctx["html"]
     assert 'class="agent-note"' in ctx["html"]
+
+
+@when('I request "/" with render=json')
+def request_render_json(ctx):
+    ctx["response"] = ctx["client_http"].get("/", params={"render": "json"})
+    ctx["body"] = ctx["response"].json()
+
+
+@then(
+    parsers.parse(
+        'the envelope includes "archive_status" with seconds {seconds} '
+        "and videos {videos}"
+    )
+)
+def envelope_has_archive_status(ctx, seconds, videos):
+    status = ctx["body"]["archive_status"]
+    assert status["seconds"] == int(seconds)
+    assert status["videos"] == int(videos)

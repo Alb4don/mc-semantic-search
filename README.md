@@ -13,6 +13,8 @@ when their wording paraphrases the transcript.
 - Quote-aware ranking boost and highlighted snippets in result fragments
 - Agent-friendly surface — `?render=json` envelope and a `/llms.txt` manual,
   advertised on the landing page itself (moltbook pattern)
+- Archive status — a "status do acervo" block (last episode, video count,
+  total duration) maintained by ingest and read by both the page and agents
 - Two ingestion modes: **Mode A** (server self-update via cron) and **Mode B**
   (local scrape + push, fallback when the server IP gets bot-blocked)
 - Ingestion bookkeeping in SQLite (`state/ingest.db`) — never on the search path
@@ -163,10 +165,22 @@ failed increments are quarantined under `data/queue/failed/` with a reason.
 
 ### State
 
-SQLite (`state/ingest.db`, configurable via `MC_STATE_DIR`) holds two
+SQLite (`state/ingest.db`, configurable via `MC_STATE_DIR`) holds three
 tables: `processed` (which chunks/videos are already indexed — checkpoints
-per video) and `meta` (a sentinel recording run bookkeeping). It is never
-consulted on the search path; only `/health` and the ingestion flow touch it.
+per video), `meta` (a sentinel recording run bookkeeping) and `video_stats`
+(per-video duration/episode/date feeding the landing-page "status do acervo").
+It is never consulted on the search path; only `/health`, the ingestion flow
+and the landing page read it.
+
+**Archive status.** The landing page's "status do acervo" block (last episode
+loaded, videos catalogued, total duration in s/min/h/days) reads the
+`video_stats` aggregates at render time — the same numbers are exposed to
+agents as `archive_status` in the `?render=json` envelope and in `/llms.txt`.
+`mc update` (Mode A) and `mc apply` (Mode B) maintain the rows as a side
+effect of runs that already exist; the one-off `mc stats-backfill` bootstraps
+the existing archive from the local transcripts cache (no yt-dlp fetch by
+default — see the deploy runbook). An empty or unreadable table simply hides
+the block; the page never breaks on it.
 
 ## Configuration
 
