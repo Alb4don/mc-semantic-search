@@ -182,6 +182,25 @@ def other_files_applied(ctx):
 # --- Unit regressions: Mode B queue validation (no qdrant needed) ------------
 
 
+def test_group_chunks_accepts_old_record_without_duration():
+    """Story 6.1 regression: pre-duration increment records (Mode A servers
+    before this story) still apply cleanly — duration defaults to None."""
+    from mc.ingest.apply import _group_chunks
+
+    record = _record("vid61", 0)  # _record never carried a duration key
+    grouped = _group_chunks([record])
+    assert grouped["vid61"][0].duration is None
+
+
+def test_group_chunks_threads_duration_from_new_record():
+    from mc.ingest.apply import _group_chunks
+
+    record = _record("vid61", 0)
+    record["duration"] = 5400
+    grouped = _group_chunks([record])
+    assert grouped["vid61"][0].duration == 5400
+
+
 def test_group_chunks_rejects_non_http_url():
     """Queue records are untrusted: url must be http(s) (producer emits YouTube
     watch URLs) or the whole file is quarantined."""

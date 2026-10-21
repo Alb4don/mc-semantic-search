@@ -23,6 +23,7 @@ def _chunks(video_id: str, n: int, *, date="2026-10-01") -> list[Chunk]:
             date=date,
             episode="1234",
             channel="Morning Crypto",
+            duration=5400,
         )
         for i in range(n)
     ]
@@ -93,6 +94,23 @@ def test_upsert_payload_complete(qdrant, coll):
     for field in ["text", "url", "start_seconds", "date", "episode", "channel"]:
         assert field in p and p[field] is not None, f"payload missing {field}"
     assert p["url"].startswith("https://www.youtube.com/watch?v=")
+
+
+def test_chunk_to_payload_includes_duration():
+    """Story 6.1: the duration rides on every payload so Mode B servers (whose
+    apply is the sole stats writer) learn each video's length."""
+    chunk = Chunk(
+        video_id="vid61",
+        text="x",
+        url="https://www.youtube.com/watch?v=vid61",
+        start_seconds=0,
+        duration=5400,
+    )
+    assert chunk.to_payload()["duration"] == 5400
+    # absent duration (old chunks) serializes as null, never crashes
+    assert Chunk(
+        video_id="v", text="x", url="https://x", start_seconds=0
+    ).to_payload()["duration"] is None
 
 
 def test_embed_failure_leaves_video_absent(qdrant, coll, monkeypatch):

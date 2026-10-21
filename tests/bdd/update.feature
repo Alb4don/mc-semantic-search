@@ -20,3 +20,10 @@ Feature: Daily `mc update` ingestion
     When `mc update` finishes
     Then "good1" is indexed, "bad1" is in the ignore list
     And the run exits non-zero with a summary of the failure
+
+  Scenario: Ingested chunks carry the video duration
+    Given channels return video IDs ["new1"] and none processed
+    And metadata for "new1" reports duration 5400
+    When `mc update` runs successfully
+    Then every indexed point for "new1" has payload "duration" = 5400
+    And the staged increment records carry "duration" = 5400

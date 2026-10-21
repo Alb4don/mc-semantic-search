@@ -27,6 +27,20 @@ _MAX_ATTEMPTS = 3
 _YTDLP_TIMEOUT_S = 120
 
 
+def _duration_seconds(raw: dict) -> int | None:
+    """yt-dlp's ``duration`` in whole seconds (Story 6.1).
+
+    yt-dlp returns an int or float of seconds; anything absent/non-numeric
+    (it sometimes yields ``"N/A"``) becomes ``None`` so downstream stats can
+    treat it as "unknown" rather than a bogus 0.
+    """
+    value = raw.get("duration")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _default_fetch(video_id: str) -> dict:
     """Fetch raw metadata for one video via the pinned yt-dlp dependency."""
     url = _YOUTUBE_URL.format(video_id=video_id)
@@ -64,6 +78,7 @@ def _normalize(raw: dict) -> dict:
         "date": date,
         "episode": _parse_episode(raw.get("title") or ""),
         "channel": raw.get("uploader") or raw.get("channel"),
+        "duration": _duration_seconds(raw),
     }
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from mc.ingest.metadata import enrich
+from mc.ingest.metadata import _normalize, enrich
 
 
 def _payload(video_id: str, **overrides) -> dict:
@@ -98,3 +98,46 @@ def test_failure_retries_three_times_then_missing(tmp_path: Path):
     assert "good" in calls
     assert set(result) == {"good"}
     assert (tmp_path / "missing.txt").read_text().splitlines() == ["bad"]
+
+
+# --- Story 6.1 — duration flows through the metadata normalizer -------------
+
+
+def test_normalize_keeps_int_duration():
+    meta = _normalize({"title": "EP #1", "duration": 5400})
+    assert meta["duration"] == 5400
+
+
+def test_normalize_float_duration_truncated_to_int():
+    meta = _normalize({"title": "EP #1", "duration": 5400.9})
+    assert meta["duration"] == 5400
+
+
+def test_normalize_missing_duration_is_none():
+    assert _normalize({"title": "EP #1"})["duration"] is None
+
+
+def test_normalize_garbage_duration_is_none():
+    # yt-dlp sometimes returns "N/A" or a non-numeric string — never crash.
+    assert _normalize({"title": "EP #1", "duration": "N/A"})["duration"] is None
+    assert _normalize({"title": "EP #1", "duration": None})["duration"] is None
+
+
+def test_duration_round_trips_through_cache_file(tmp_path: Path):
+    def fetch(video_id: str) -> dict:
+        return _payload(video_id, duration=3600)
+
+    first = enrich(["vid61"], cache_dir=tmp_path, fetch=fetch)["vid61"]
+    assert first["duration"] == 3600
+    # the on-disk cache entry carries duration, so a re-fetch loads it back
+    cached = json.loads((tmp_path / "vid61.json").read_text())
+    assert cached["duration"] == 3600
+    calls: list[str] = []
+
+    def fetch_again(video_id: str) -> dict:
+        calls.append(video_id)
+        return _payload(video_id, duration=999)
+
+    second = enrich(["vid61"], cache_dir=tmp_path, fetch=fetch_again)["vid61"]
+    assert calls == []  # served from cache, fetcher never invoked
+    assert second["duration"] == 3600

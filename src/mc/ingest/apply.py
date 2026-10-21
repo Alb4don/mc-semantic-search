@@ -91,6 +91,7 @@ def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
                 date=record.get("date"),
                 episode=record.get("episode"),
                 channel=record.get("channel"),
+                duration=record.get("duration"),  # Story 6.1; old records lack it
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"malformed record {record!r}: {exc}") from None

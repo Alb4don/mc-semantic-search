@@ -84,7 +84,7 @@ def _run(ctx, metadata_fetch=None):
             collection=ctx["collection"],
             discover=lambda channels: ctx["discovered"],
             downloader=ctx["downloader"],
-            metadata_fetch=metadata_fetch or (lambda ids: {}),
+            metadata_fetch=metadata_fetch or (lambda ids: ctx.get("metadata", {})),
             lock_path=ctx["tmp_path"] / "update.lock",
             transcripts_dir=ctx["transcripts_dir"],
             queue_dir=ctx["queue_dir"],
@@ -99,6 +99,11 @@ def _run(ctx, metadata_fetch=None):
 def channels_one_new(ctx, video_id):
     ctx["discovered"] = [video_id]
     ctx["downloader"] = _make_updater(ctx, {video_id: _segments(3, video_id)})
+
+
+@given(parsers.parse('metadata for "{video_id}" reports duration {duration:d}'))
+def metadata_reports_duration(ctx, video_id, duration):
+    ctx["metadata"] = {video_id: {"duration": duration}}
 
 
 @when("`mc update` runs successfully")
@@ -152,6 +157,43 @@ def queue_staging_records(ctx, expected):
         "episode",
         "channel",
     }
+
+
+@then(
+    parsers.parse('every indexed point for "{video_id}" has payload "duration" = {expected:d}')
+)
+def indexed_points_carry_duration(ctx, video_id, expected):
+    from qdrant_client.http import models as qm
+
+    points, _ = ctx["client"].scroll(
+        collection_name=ctx["collection"],
+        scroll_filter=qm.Filter(
+            must=[
+                qm.FieldCondition(
+                    key="video_id", match=qm.MatchValue(value=video_id)
+                )
+            ]
+        ),
+        limit=1000,
+        with_payload=True,
+    )
+    chunks = [p for p in points if p.id != 0]  # exclude meta sentinel
+    assert chunks, f"no indexed points for {video_id}"
+    assert all(p.payload.get("duration") == expected for p in chunks)
+
+
+@then(
+    parsers.parse('the staged increment records carry "duration" = {expected:d}')
+)
+def staged_records_carry_duration(ctx, expected):
+    pending = ctx["queue_dir"] / "pending.jsonl"
+    lines = [
+        json.loads(line)
+        for line in pending.read_text().splitlines()
+        if line.strip()
+    ]
+    assert lines, "no staged increment records"
+    assert all(rec.get("duration") == expected for rec in lines)
 
 
 @given(

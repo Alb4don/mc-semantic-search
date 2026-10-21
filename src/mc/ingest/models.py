@@ -16,6 +16,9 @@ class Chunk:
     date: str | None = None
     episode: str | None = None
     channel: str | None = None
+    # Story 6.1: the video's total length in seconds. Rides on every payload
+    # so Mode B servers (whose apply is the sole stats writer) learn it too.
+    duration: int | None = None
 
     def to_payload(self) -> dict:
         return {
@@ -25,5 +28,6 @@ class Chunk:
             "date": self.date,
             "episode": self.episode,
             "channel": self.channel,
+            "duration": self.duration,
             "video_id": self.video_id,
         }

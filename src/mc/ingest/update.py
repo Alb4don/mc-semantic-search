@@ -181,6 +181,7 @@ def _ingest_one(
             date=info.get("date"),
             episode=info.get("episode"),
             channel=info.get("channel"),
+            duration=info.get("duration"),
         )
         for chunk in chunk_segments(segments, video_id)
     ]
