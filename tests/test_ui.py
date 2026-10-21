@@ -14,11 +14,57 @@ from fastapi.testclient import TestClient
 from pytest_bdd import given, parsers, scenarios, then, when
 from qdrant_client import QdrantClient
 
-from mc.api.app import create_app
+from mc.api.app import (
+    _fmt_dec_pt,
+    _fmt_int_pt,
+    _format_archive_status,
+    create_app,
+)
 from mc.ingest.models import Chunk
 from mc.qdrant import ensure_collection, upsert_video
 
 scenarios("bdd/ui.feature")
+
+
+# --- Story 6.5 — pt-BR formatting helpers + archive-status context ----------
+
+
+def test_fmt_int_pt_thousands_separator():
+    assert _fmt_int_pt(197342) == "197.342"
+    assert _fmt_int_pt(3556) == "3.556"
+    assert _fmt_int_pt(0) == "0"
+
+
+def test_fmt_dec_pt_comma_and_rounding():
+    assert _fmt_dec_pt(54.8172) == "54,82"  # rounds at 2 decimals
+    assert _fmt_dec_pt(3289.0333) == "3.289,03"  # thousands sep + comma
+    assert _fmt_dec_pt(2.2840) == "2,28"
+
+
+def test_format_archive_status_from_seeded_numbers():
+    raw = {
+        "videos": 3556,
+        "seconds": 197342,
+        "last_episode": 971,
+        "last_episode_date": "2026-10-20",
+    }
+    status = _format_archive_status(raw)
+    assert status["last_episode"] == "#971 · 2026-10-20"
+    assert status["videos"] == "3.556"
+    assert status["duration"] == (
+        "197.342 segundos · 3.289,03 minutos · 54,82 horas · 2,28 dias"
+    )
+
+
+def test_format_archive_status_omits_unknown_stats():
+    # no episode/date → last-episode line omitted; None seconds → no duration
+    assert _format_archive_status(
+        {"videos": 0, "seconds": None, "last_episode": None, "last_episode_date": None}
+    ) == {}
+    partial = _format_archive_status(
+        {"videos": 12, "seconds": None, "last_episode": None, "last_episode_date": None}
+    )
+    assert partial == {"videos": "12"}  # only the known stat survives
 
 pytestmark = pytest.mark.integration
 
@@ -209,3 +255,75 @@ def test_page_renders_without_javascript(ctx):
     html = ctx["client_http"].get("/", params={"query": QUERY_WORD}).text
     assert "<html" in html and "tape-counter" in html
     assert 'action="/" method="get"' in html
+
+
+# --- Story 6.5 — "status do acervo" below everything ------------------------
+
+
+@given("the archive has 3556 catalogued videos totalling 197342 seconds")
+def archive_has_videos_and_seconds(ctx):
+    state = ctx["state"]
+    total, count, per = 197342, 3556, 50
+    for i in range(count - 1):
+        state.record_video_stats(f"statvid{i:06d}", duration=per)
+    ctx["last_video"] = "statvid-last"
+    ctx["remainder"] = total - per * (count - 1)
+
+
+@given(parsers.parse("the last episode loaded is #{episode} from {date}"))
+def last_episode_fact(ctx, episode, date):
+    ctx["state"].record_video_stats(
+        ctx["last_video"],
+        duration=ctx["remainder"],
+        episode=int(episode),
+        date=date,
+    )
+
+
+@given("the archive has no recorded stats")
+def archive_has_no_stats(ctx):
+    pass  # a fresh state store has an empty video_stats table by default
+
+
+@given("the state store raises on stats reads")
+def state_raises_on_stats(ctx, monkeypatch):
+    from mc.state import StateStore
+
+    def boom(self):
+        raise RuntimeError("stats db corrupt")
+
+    monkeypatch.setattr(StateStore, "archive_stats", boom)
+
+
+@then("the status block is the last content inside the footer")
+def status_last_in_footer(ctx):
+    html = ctx["html"]
+    footer = html[html.index('<footer class="colophon">'):]
+    footer = footer[: footer.index("</footer>") + len("</footer>")]
+    assert 'class="archive-status"' in footer
+    # below the colophon note paragraphs — the last thing on the page
+    assert footer.index('class="archive-status"') > footer.rindex("colophon-note")
+
+
+@then(parsers.parse('it shows "{label}" "{value}"'))
+def status_shows(ctx, label, value):
+    assert f"<dt>{label}</dt>" in ctx["html"], label
+    assert f"<dd>{value}</dd>" in ctx["html"], value
+
+
+@then("the page renders without the status block")
+def no_status_block(ctx):
+    assert 'class="archive-status"' not in ctx["html"]
+
+
+@then("the freshness line and colophon notes still show")
+def freshness_and_colophon_still_show(ctx):
+    assert "acervo atualizado" in ctx["html"]
+    assert "colophon-note" in ctx["html"]
+
+
+@then("the page still returns 200 with the search console and agent note intact")
+def page_intact_on_broken_stats(ctx):
+    assert ctx["response"].status_code == 200
+    assert 'class="console"' in ctx["html"]
+    assert 'class="agent-note"' in ctx["html"]

@@ -137,6 +137,20 @@
     <p>{{ freshness_line }}</p>
     <p class="colophon-note">muriel é a bibliotecária que encontra tudo que foi dito no morning crypto.</p>
     <p class="colophon-note">as buscas rodam no servidor — nada é rastreado.</p>
+    {# status do acervo — the archive's scale, below everything else.
+       Server-rendered, no JS: each stat is omitted when unknown and the whole
+       block hides when nothing is known (same failure isolation as the
+       freshness line above). The numbers are archive-derived (video_stats). #}
+    {% if archive_status %}
+    <section class="archive-status" aria-labelledby="archive-status-title">
+      <h2 class="archive-title" id="archive-status-title">status do acervo</h2>
+      <dl class="archive-stats">
+        {% if archive_status.last_episode %}<div class="stat"><dt>último episódio</dt><dd>{{ archive_status.last_episode }}</dd></div>{% endif %}
+        {% if archive_status.videos %}<div class="stat"><dt>vídeos catalogados</dt><dd>{{ archive_status.videos }}</dd></div>{% endif %}
+        {% if archive_status.duration %}<div class="stat stat--full"><dt>duração total</dt><dd>{{ archive_status.duration }}</dd></div>{% endif %}
+      </dl>
+    </section>
+    {% endif %}
   </footer>
 </body>
 </html>

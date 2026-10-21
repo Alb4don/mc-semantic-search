@@ -20,3 +20,23 @@ Feature: Search page (HTML + htmx)
   Scenario: The page teaches agents how to use it
     Given I am on the search page
     Then the page shows how to point an agent at Muriel
+
+  Scenario: Archive status is visible below everything
+    Given the archive has 3556 catalogued videos totalling 197342 seconds
+    And the last episode loaded is #971 from 2026-10-20
+    When I open the search page
+    Then the status block is the last content inside the footer
+    And it shows "último episódio" "#971 · 2026-10-20"
+    And it shows "vídeos catalogados" "3.556"
+    And it shows "duração total" "197.342 segundos · 3.289,03 minutos · 54,82 horas · 2,28 dias"
+
+  Scenario: Status hides when the archive reports nothing
+    Given the archive has no recorded stats
+    When I open the search page
+    Then the page renders without the status block
+    And the freshness line and colophon notes still show
+
+  Scenario: A broken stats store never breaks the page
+    Given the state store raises on stats reads
+    When I open the search page
+    Then the page still returns 200 with the search console and agent note intact

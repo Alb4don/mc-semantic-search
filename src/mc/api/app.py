@@ -82,6 +82,51 @@ def _tape(start_seconds: int) -> str:
     return f"T+{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
+def _fmt_int_pt(value: int) -> str:
+    """pt-BR integer: thousands separator ``.`` → ``197.342``, ``3.556``."""
+    return f"{int(value):,}".replace(",", ".")
+
+
+def _fmt_dec_pt(value: float) -> str:
+    """pt-BR decimal: 2 places, comma decimal, ``.`` thousands → ``54,82``,
+    ``3.289,03``."""
+    us = f"{float(value):,.2f}"  # "54.82" / "3,289.03"
+    return us.replace(".", "\x00").replace(",", ".").replace("\x00", ",")
+
+
+def _duration_line(seconds: int | None) -> str | None:
+    """The total duration across s/min/h/days, or None when unknown (Story 6.5)."""
+    if seconds is None:
+        return None
+    parts = [
+        f"{_fmt_int_pt(seconds)} segundos",
+        f"{_fmt_dec_pt(seconds / 60)} minutos",
+        f"{_fmt_dec_pt(seconds / 3600)} horas",
+        f"{_fmt_dec_pt(seconds / 86400)} dias",
+    ]
+    return " · ".join(parts)
+
+
+def _format_archive_status(raw: dict) -> dict:
+    """Build the template ``archive_status`` dict from raw archive numbers.
+
+    Each stat is omitted when its input is unknown (never rendered as 0/—);
+    the dict is empty when nothing is known, so the template hides the whole
+    section. One source of truth: the same ``archive_stats()`` the JSON
+    envelope reads (Story 6.6).
+    """
+    stats: dict = {}
+    episode, date = raw.get("last_episode"), raw.get("last_episode_date")
+    if episode is not None and date:
+        stats["last_episode"] = f"#{episode} · {date}"
+    if raw.get("videos"):
+        stats["videos"] = _fmt_int_pt(raw["videos"])
+    duration = _duration_line(raw.get("seconds"))
+    if duration is not None:
+        stats["duration"] = duration
+    return stats
+
+
 def _freshness_line(last_update: str | None) -> str:
     """Portuguese archive-freshness line shown in the footer/empty state."""
     if not last_update:
@@ -204,6 +249,15 @@ def create_app(
         except Exception:  # unreadable state must never break search
             return {"last_update": None}
 
+    def _archive_stats() -> dict:
+        # Same failure isolation as _freshness: an empty/missing/unreadable
+        # video_stats table hides the section and leaves the page intact.
+        try:
+            with _state() as store:
+                return _format_archive_status(store.archive_stats())
+        except Exception:  # noqa: BLE001 — stats must never break the page
+            return {}
+
     def _video_results(query: str, effective_limit: int) -> list[dict]:
         try:
             results: list[SearchResult] = run_search(
@@ -278,7 +332,7 @@ def create_app(
                 "query": stripped,
                 "results": results,
                 "freshness_line": _freshness_line(_freshness()["last_update"]),
-                "stats": "",
+                "archive_status": _archive_stats(),
                 "agent_box": agent_docs.landing_box(),
             },
         )

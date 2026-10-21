@@ -535,6 +535,72 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* ---------- status do acervo (Story 6.5) ---------- */
+/* The archive's scale, in the colophon grammar: a monospace ledger readout,
+   dim ink, amber tick marks — the same voice as the tape counter and the
+   agent-steps markers, so "how much is catalogued" reads as site metadata,
+   not a marketing stat strip. Each stat omits itself when unknown; the block
+   hides entirely when nothing is known (server-rendered, no JS). */
+
+.archive-status {
+  margin-top: calc(var(--mc-rhythm) * 4);
+  padding-top: calc(var(--mc-rhythm) * 2);
+  border-top: 1px solid var(--mc-line);
+}
+
+.archive-title {
+  font-family: var(--mc-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mc-ink-dim);
+  margin: 0 0 calc(var(--mc-rhythm) * 2);
+}
+
+.archive-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(var(--mc-rhythm) * 2) calc(var(--mc-rhythm) * 4);
+  margin: 0;
+}
+
+.stat {
+  display: grid;
+  gap: calc(var(--mc-rhythm) * 0.25);
+  font-family: var(--mc-mono);
+  padding-left: calc(var(--mc-rhythm) * 2);
+  /* the amber tick: the same accent as the agent-steps markers */
+  border-left: 2px solid var(--mc-amber);
+}
+
+.stat dt {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mc-ink-dim);
+}
+
+.stat dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--mc-ink);
+  overflow-wrap: anywhere;
+}
+
+/* the four-unit duration reads best full width, not crammed into a column */
+.stat--full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .archive-stats {
+    grid-template-columns: 1fr;
+  }
+  .stat--full {
+    grid-column: auto;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
