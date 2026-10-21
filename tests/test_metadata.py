@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from mc.ingest.metadata import _normalize, duration_int, enrich, episode_int
 
 
@@ -90,9 +92,7 @@ def test_failure_retries_three_times_then_missing(tmp_path: Path):
             raise RuntimeError("network down")
         return _payload(video_id)
 
-    result = enrich(
-        ["bad", "good"], cache_dir=tmp_path, fetch=fetch, backoff=(0, 0, 0)
-    )
+    result = enrich(["bad", "good"], cache_dir=tmp_path, fetch=fetch, backoff=(0, 0, 0))
 
     assert calls.count("bad") == 3
     assert "good" in calls
@@ -181,3 +181,81 @@ def test_duration_int_none_for_non_finite_floats():
     assert duration_int(float("inf")) is None
     assert duration_int(float("-inf")) is None
     assert duration_int(float("nan")) is None
+
+
+# --- _default_fetch — the real yt-dlp subprocess -----------------------------
+#
+# YouTube's bot gating can leave a video with NO playable formats (only
+# storyboards) even though the extractor knows its metadata. The default
+# format selector then aborts the whole --dump-single-json with "Requested
+# format is not available" — so metadata-only fetches must not require a
+# format, and failures must carry yt-dlp's stderr (an bare "exit status 1"
+# is undiagnosable for the operator).
+
+
+def _fake_run(monkeypatch, *, stdout: str | None = None, stderr: str | None = None):
+    """Replace subprocess.run with a recorder; returns the captured argv list."""
+    import subprocess as sp
+
+    import mc.ingest.metadata as metadata_mod
+
+    argvs: list[list[str]] = []
+
+    def fake_run(cmd, **_kwargs):
+        argvs.append(list(cmd))
+        if stderr is not None:
+            raise sp.CalledProcessError(returncode=1, cmd=cmd, stderr=stderr)
+        return sp.CompletedProcess(cmd, returncode=0, stdout=stdout or "{}", stderr="")
+
+    monkeypatch.setattr(metadata_mod.subprocess, "run", fake_run)
+    return argvs
+
+
+def test_default_fetch_never_requires_a_playable_format(monkeypatch):
+    from mc.ingest.metadata import _default_fetch
+
+    argvs = _fake_run(monkeypatch, stdout='{"title": "EP #88", "duration": 9114}')
+
+    raw = _default_fetch("--5z_jFh-_g")
+
+    assert raw["duration"] == 9114
+    (argv,) = argvs
+    assert "--ignore-no-formats-error" in argv  # bot-gated videos still yield metadata
+    assert "--dump-single-json" in argv
+    assert argv[-1] == "https://www.youtube.com/watch?v=--5z_jFh-_g"
+
+
+def test_default_fetch_failure_carries_stderr(monkeypatch):
+    from mc.ingest.metadata import _default_fetch
+
+    _fake_run(
+        monkeypatch,
+        stderr="ERROR: [youtube] --5z_jFh-_g: Requested format is not available.",
+    )
+
+    with pytest.raises(RuntimeError, match="Requested format is not available"):
+        _default_fetch("--5z_jFh-_g")
+
+
+def test_default_fetch_uses_cookies_file_when_present(monkeypatch, tmp_path):
+    from mc.ingest.metadata import _default_fetch
+
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    monkeypatch.setattr("mc.config.COOKIES_PATH", str(cookies))
+    argvs = _fake_run(monkeypatch, stdout="{}")
+
+    _default_fetch("vid")
+
+    assert argvs[0][argvs[0].index("--cookies") + 1] == str(cookies)
+
+
+def test_default_fetch_without_cookies_file_still_fetches(monkeypatch, tmp_path):
+    from mc.ingest.metadata import _default_fetch
+
+    monkeypatch.setattr("mc.config.COOKIES_PATH", str(tmp_path / "absent-cookies.txt"))
+    argvs = _fake_run(monkeypatch, stdout="{}")
+
+    _default_fetch("vid")
+
+    assert "--cookies" not in argvs[0]  # cookies are optional, not required

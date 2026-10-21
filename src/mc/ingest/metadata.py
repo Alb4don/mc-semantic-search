@@ -9,6 +9,7 @@ simply omitted from the returned mapping; the rest of the batch continues.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 import time
@@ -17,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 
 from mc import config
+
+logger = logging.getLogger(__name__)
 
 Fetcher = Callable[[str], dict]
 
@@ -50,19 +53,47 @@ def _duration_seconds(raw: dict) -> int | None:
 
 
 def _default_fetch(video_id: str) -> dict:
-    """Fetch raw metadata for one video via the pinned yt-dlp dependency."""
+    """Fetch raw metadata for one video via the pinned yt-dlp dependency.
+
+    ``--ignore-no-formats-error`` keeps the metadata dump alive when YouTube's
+    bot gating leaves a video with no playable formats (storyboards only) —
+    the extractor still knows title/date/duration, and the default format
+    selector would otherwise abort the whole dump. The conventional cookies
+    file (``MC_COOKIES_PATH``, the download pipeline's file) is passed when it
+    exists. A failed fetch raises with yt-dlp's stderr tail so the operator
+    can tell a bot gate from a dead video, not just "exit status 1".
+    """
     url = _YOUTUBE_URL.format(video_id=video_id)
+    cmd = [
+        "yt-dlp",
+        "--dump-single-json",
+        "--no-warnings",
+        "--ignore-no-formats-error",
+    ]
+    cookies = Path(config.COOKIES_PATH)
+    if cookies.exists():
+        if cookies.stat().st_mode & 0o077:  # group/other-readable credential file
+            logger.warning(
+                "cookies file %s is group/other-readable — tightening to 0600",
+                cookies,
+            )
+            cookies.chmod(0o600)
+        cmd += ["--cookies", str(cookies)]
+    cmd.append(url)
     try:
         proc = subprocess.run(
-            ["yt-dlp", "--dump-single-json", "--no-warnings", url],
+            cmd,
             capture_output=True,
             text=True,
             check=True,
             timeout=_YTDLP_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"yt-dlp metadata fetch timed out after {_YTDLP_TIMEOUT_S}s") from exc
+    except subprocess.CalledProcessError as exc:
+        stderr_tail = ((exc.stderr or "").strip())[-400:]
         raise RuntimeError(
-            f"yt-dlp metadata fetch timed out after {_YTDLP_TIMEOUT_S}s"
+            f"yt-dlp metadata fetch failed for {video_id}: {stderr_tail or exc}"
         ) from exc
     return json.loads(proc.stdout)
 
