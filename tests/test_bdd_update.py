@@ -106,6 +106,16 @@ def metadata_reports_duration(ctx, video_id, duration):
     ctx["metadata"] = {video_id: {"duration": duration}}
 
 
+@given(parsers.parse(
+    'metadata for "{video_id}" reports duration {duration:d}, '
+    'episode "{episode}" and date "{date}"'
+))
+def metadata_reports_full(ctx, video_id, duration, episode, date):
+    ctx["metadata"] = {
+        video_id: {"duration": duration, "episode": episode, "date": date}
+    }
+
+
 @when("`mc update` runs successfully")
 def run_success(ctx):
     _run(ctx)
@@ -194,6 +204,16 @@ def staged_records_carry_duration(ctx, expected):
     ]
     assert lines, "no staged increment records"
     assert all(rec.get("duration") == expected for rec in lines)
+
+
+@then(parsers.parse(
+    'the state store records "{video_id}" stats with seconds {seconds:d} and episode {episode:d}'
+))
+def state_records_update_stats(ctx, video_id, seconds, episode):
+    stats = ctx["state"].archive_stats()
+    assert stats["videos"] == 1
+    assert stats["seconds"] == seconds
+    assert stats["last_episode"] == episode
 
 
 @given(
@@ -404,3 +424,42 @@ def test_staging_runs_before_processed_marker(tmp_path, monkeypatch):
     assert not state.is_processed("stage1")
     # an indexed video must never be ignore-listed for a local staging error
     assert not (tmp_path / "transcripts" / "ignored_videos.txt").exists()
+
+
+def test_failed_video_records_no_stats(tmp_path, monkeypatch):
+    """Story 6.3: a video that fails download records no archive stats — the
+    stats write happens only after a successful per-video commit."""
+    import uuid as _uuid
+
+    from qdrant_client import QdrantClient as QC
+
+    from mc.ingest import update as update_mod
+    from mc.state import StateStore
+
+    client = QC(url="http://localhost:6333", timeout=30)
+    collection = f"mc-bdd-{_uuid.uuid4().hex[:8]}"
+    state = StateStore(tmp_path / "ingest.db")
+    import mc.qdrant as q
+
+    monkeypatch.setattr(q, "embed_passage", lambda texts: [[0.5] * 384 for _ in texts])
+    try:
+        code = update_mod.run_update(
+            channels=("https://www.youtube.com/@test",),
+            state=state,
+            client=client,
+            collection=collection,
+            discover=lambda channels: ["badstat"],
+            downloader=lambda vid: None,  # download fails → no commit
+            metadata_fetch=lambda ids: {
+                "badstat": {"duration": 5400, "episode": "971", "date": "2026-10-20"}
+            },
+            lock_path=tmp_path / "update.lock",
+            transcripts_dir=tmp_path / "transcripts",
+            queue_dir=tmp_path / "queue",
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert code == 1
+    assert state.archive_stats()["videos"] == 0
+    client.delete_collection(collection)

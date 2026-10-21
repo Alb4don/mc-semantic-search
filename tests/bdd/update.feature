@@ -27,3 +27,9 @@ Feature: Daily `mc update` ingestion
     When `mc update` runs successfully
     Then every indexed point for "new1" has payload "duration" = 5400
     And the staged increment records carry "duration" = 5400
+
+  Scenario: Ingested videos record their archive stats
+    Given channels return video IDs ["stat1"] and none processed
+    And metadata for "stat1" reports duration 5400, episode "971" and date "2026-10-20"
+    When `mc update` runs successfully
+    Then the state store records "stat1" stats with seconds 5400 and episode 971

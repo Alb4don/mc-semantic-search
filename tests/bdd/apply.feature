@@ -16,3 +16,9 @@ Feature: Apply queued increments (Mode B server)
     When "mc apply" runs
     Then the file is moved to queue/failed/ with the error logged
     And other queued files are still applied
+
+  Scenario: Applied increments update archive stats
+    Given an increment file carries a video with duration 5400, episode "971", date "2026-10-20"
+    When "mc apply" processes it
+    Then the state store records that video's stats
+    And "archive_stats()" reports seconds 5400 and last episode 971

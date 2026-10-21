@@ -17,6 +17,8 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 from qdrant_client import QdrantClient
 
+from mc.state import StateStore
+
 scenarios("bdd/apply.feature")
 
 pytestmark = pytest.mark.integration
@@ -179,6 +181,43 @@ def other_files_applied(ctx):
     assert (ctx["queue_dir"] / "2026-10-10.jsonl").exists()
 
 
+# --- Scenario: Applied increments update archive stats (Story 6.3) -----------
+
+
+@given(parsers.parse(
+    'an increment file carries a video with duration {duration:d}, '
+    'episode "{episode}", date "{date}"'
+))
+def increment_with_stats(ctx, duration, episode, date):
+    records = [_record("statvid1", i) for i in range(3)]
+    for r in records:
+        r["duration"] = duration
+        r["episode"] = episode
+        r["date"] = date
+    _write_jsonl(ctx["queue_dir"] / "2026-10-20.jsonl", records)
+
+
+@when('"mc apply" processes it')
+def apply_processes_once(ctx):
+    _run_apply(ctx)
+
+
+@then("the state store records that video's stats")
+def apply_records_video_stats(ctx):
+    stats = StateStore(ctx["state_db"]).archive_stats()
+    assert stats["videos"] == 1
+    assert stats["last_episode_date"] == "2026-10-20"
+
+
+@then(parsers.parse(
+    '"archive_stats()" reports seconds {seconds:d} and last episode {episode:d}'
+))
+def apply_stats_report(ctx, seconds, episode):
+    stats = StateStore(ctx["state_db"]).archive_stats()
+    assert stats["seconds"] == seconds
+    assert stats["last_episode"] == episode
+
+
 # --- Unit regressions: Mode B queue validation (no qdrant needed) ------------
 
 
@@ -249,3 +288,34 @@ def test_oversized_increment_file_quarantined_without_loading(tmp_path):
     assert report["failed_files"] == 1
     assert (queue_dir / "failed" / "big.jsonl").exists()
     assert not big.exists()
+
+
+def test_apply_records_partial_stats_without_duration(ctx):
+    """Story 6.3: an increment without a duration still records stats (duration
+    NULL is acceptable — Story 6.4 fills it later); the episode still lands."""
+    records = [_record("nodur", i) for i in range(2)]
+    for r in records:
+        r["episode"] = "971"  # episode known, duration absent (pre-6.1 style)
+    _write_jsonl(ctx["queue_dir"] / "2026-10-22.jsonl", records)
+    _run_apply(ctx)
+
+    stats = StateStore(ctx["state_db"]).archive_stats()
+    assert stats["videos"] == 1
+    assert stats["seconds"] is None  # partial: NULL duration is fine
+    assert stats["last_episode"] == 971
+
+
+def test_stats_write_failure_does_not_fail_apply(ctx, monkeypatch):
+    """Story 6.3: a stats-write failure is logged and non-fatal — the video was
+    already durably upserted, so the apply run still succeeds."""
+
+    def boom(*_a, **_k):
+        raise RuntimeError("stats db full")
+
+    monkeypatch.setattr(StateStore, "record_video_stats", boom)
+    records = [_record("boomstat", i) for i in range(2)]
+    _write_jsonl(ctx["queue_dir"] / "2026-10-21.jsonl", records)
+
+    report = _run_apply(ctx)
+    assert report["applied_chunks"] == 2  # upsert committed despite the failure
+    assert _point_count(ctx) == 2

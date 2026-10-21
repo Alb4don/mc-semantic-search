@@ -33,7 +33,7 @@ from mc.ingest.download import (
     download_transcript,
 )
 from mc.ingest.lock import RunLock
-from mc.ingest.metadata import enrich
+from mc.ingest.metadata import enrich, episode_int
 from mc.qdrant import client_kwargs, ensure_collection, upsert_video
 from mc.state import StateStore
 
@@ -194,6 +194,24 @@ def _ingest_one(
     # before this line leaves the video re-discoverable, and push/apply
     # dedupe by content hash so a re-staged duplicate is a no-op.
     state.mark_processed(video_id, "update")
+    # Story 6.3: record archive stats only AFTER the durable commit (same
+    # post-commit ordering). Best-effort — the ingest already succeeded.
+    _record_stats(state, video_id, info)
+
+
+def _record_stats(state: StateStore, video_id: str, info: dict) -> None:
+    """Write this video's archive stats (Story 6.3). Post-commit and
+    non-fatal: the ingest already succeeded, so a stats failure is logged and
+    swallowed — the idempotent upsert lets the next run re-record."""
+    try:
+        state.record_video_stats(
+            video_id,
+            duration=info.get("duration"),
+            episode=episode_int(info.get("episode")),
+            date=info.get("date"),
+        )
+    except Exception:  # noqa: BLE001 — stats must never break ingest
+        logger.warning("archive-stats write failed for %s", video_id, exc_info=True)
 
 
 def _stage_for_push(chunks, queue_dir: Path) -> None:

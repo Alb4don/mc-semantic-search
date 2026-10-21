@@ -22,6 +22,7 @@ from qdrant_client import QdrantClient
 
 from mc import config
 from mc.ingest.lock import RunLock
+from mc.ingest.metadata import episode_int
 from mc.ingest.models import Chunk
 from mc.qdrant import client_kwargs, upsert_video
 from mc.state import StateStore
@@ -115,6 +116,21 @@ def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
     return grouped
 
 
+def _record_stats(state: StateStore, video_id: str, chunk: Chunk) -> None:
+    """Best-effort archive-stats write from an applied video's first chunk
+    (Story 6.3). Post-commit and non-fatal: apply already upserted the video,
+    so a stats failure is logged and swallowed — the upsert is idempotent."""
+    try:
+        state.record_video_stats(
+            video_id,
+            duration=chunk.duration,
+            episode=episode_int(chunk.episode),
+            date=chunk.date,
+        )
+    except Exception:  # noqa: BLE001 — stats must never break apply
+        logger.warning("archive-stats write failed for %s", video_id, exc_info=True)
+
+
 def _quarantine(queue_dir: Path, path: Path, exc: ValueError) -> None:
     """Move a malformed increment into <queue_dir>/failed/ and log the error."""
     failed_dir = queue_dir / _FAILED_DIR
@@ -200,6 +216,7 @@ def _apply_file(
         for h in hashes:  # mark only AFTER the atomic per-video upsert committed
             state.record_key(f"{_APPLIED_PREFIX}{h}", _now_iso())
         applied_hashes.extend(hashes)
+        _record_stats(state, video_id, chunks[0])  # Story 6.3: archive stats
 
     if applied_hashes:
         report["applied_chunks"] += len(applied_hashes)
