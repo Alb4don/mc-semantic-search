@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from mc.ingest.metadata import _normalize, episode_int, enrich
+from mc.ingest.metadata import _normalize, enrich, episode_int
 
 
 def _payload(video_id: str, **overrides) -> dict:
