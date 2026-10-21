@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- Story 6.2: per-video archive facts feeding the landing-page "status do
+-- acervo". Added to _SCHEMA so every existing state DB auto-migrates on the
+-- next open. episode is INTEGER so MAX() is numeric, never lexical.
+CREATE TABLE IF NOT EXISTS video_stats (
+    video_id TEXT PRIMARY KEY,
+    duration INTEGER,   -- total video length in seconds; NULL when unknown
+    episode INTEGER,    -- numeric episode; NULL when unparseable
+    date TEXT           -- ISO yyyy-mm-dd upload date; NULL when unknown
+);
 """
 
 _BUSY_TIMEOUT_MS = 5000
@@ -79,6 +88,54 @@ class StateStore:
 
     def count_processed(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM processed").fetchone()[0]
+
+    # --- archive stats (Story 6.2) -------------------------------------------
+    def record_video_stats(
+        self,
+        video_id: str,
+        *,
+        duration: int | None = None,
+        episode: int | None = None,
+        date: str | None = None,
+    ) -> None:
+        """Idempotent per-video upsert; **non-null wins** on every column.
+
+        Re-ingests upgrade rows and partial data never wipes a known value
+        (``COALESCE(excluded.x, x)``), so every writer is safe to re-run. An
+        all-None call still inserts the row — it marks the video "seen, stats
+        unknown" so COUNT(*) stays honest.
+        """
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO video_stats(video_id, duration, episode, date) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(video_id) DO UPDATE SET "
+                "duration=COALESCE(excluded.duration, video_stats.duration), "
+                "episode=COALESCE(excluded.episode, video_stats.episode), "
+                "date=COALESCE(excluded.date, video_stats.date)",
+                (video_id, duration, episode, date),
+            )
+
+    def archive_stats(self) -> dict:
+        """One cheap sqlite read of the archive numbers for the landing page.
+
+        ``COUNT(*)`` videos, ``SUM(duration)`` seconds (NULL-ignoring, so
+        ``None`` when no duration is known), and the (episode, date) pair of
+        the highest known episode (numeric ORDER BY).
+        """
+        total = self._conn.execute(
+            "SELECT COUNT(*), SUM(duration) FROM video_stats"
+        ).fetchone()
+        last = self._conn.execute(
+            "SELECT episode, date FROM video_stats "
+            "WHERE episode IS NOT NULL ORDER BY episode DESC LIMIT 1"
+        ).fetchone()
+        return {
+            "videos": total[0] or 0,
+            "seconds": total[1],
+            "last_episode": last[0] if last else None,
+            "last_episode_date": last[1] if last else None,
+        }
 
     # --- run success bookkeeping (NFR-4) -------------------------------------
     def record_success(self, run_type: str) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from mc.ingest.metadata import _normalize, enrich
+from mc.ingest.metadata import _normalize, episode_int, enrich
 
 
 def _payload(video_id: str, **overrides) -> dict:
@@ -141,3 +141,18 @@ def test_duration_round_trips_through_cache_file(tmp_path: Path):
     second = enrich(["vid61"], cache_dir=tmp_path, fetch=fetch_again)["vid61"]
     assert calls == []  # served from cache, fetcher never invoked
     assert second["duration"] == 3600
+
+
+# --- Story 6.2 — episode_int (numeric episode for MAX) ----------------------
+
+
+def test_episode_int_parses_number_string():
+    assert episode_int("971") == 971
+    assert episode_int("1000") == 1000
+    assert episode_int("  42  ") == 42  # tolerant of surrounding whitespace
+
+
+def test_episode_int_none_for_garbage():
+    assert episode_int("garbage") is None
+    assert episode_int("") is None
+    assert episode_int(None) is None

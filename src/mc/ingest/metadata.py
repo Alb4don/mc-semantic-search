@@ -68,6 +68,21 @@ def _parse_episode(title: str) -> str | None:
     return digits[-1] if digits else None
 
 
+def episode_int(episode: str | int | None) -> int | None:
+    """Episode as a plain int for numeric storage/ordering (Story 6.2).
+
+    ``"971"`` → ``971``; garbage, blanks or ``None`` → ``None``. Writers feed
+    this to ``record_video_stats`` so ``MAX(episode)`` is numeric, never
+    lexical (``1000`` beats ``999`` even though ``"1000" < "999"``).
+    """
+    if episode is None:
+        return None
+    try:
+        return int(str(episode).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize(raw: dict) -> dict:
     upload_date = raw.get("upload_date") or ""
     try:
