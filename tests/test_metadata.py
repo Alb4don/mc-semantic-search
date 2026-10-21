@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from mc.ingest.metadata import _normalize, enrich, episode_int
+from mc.ingest.metadata import _normalize, duration_int, enrich, episode_int
 
 
 def _payload(video_id: str, **overrides) -> dict:
@@ -156,3 +156,28 @@ def test_episode_int_none_for_garbage():
     assert episode_int("garbage") is None
     assert episode_int("") is None
     assert episode_int(None) is None
+
+
+# --- Story 6.1 — duration_int (numeric seconds for storage/aggregates) ------
+
+
+def test_duration_int_coerces_numbers():
+    assert duration_int(5400) == 5400
+    assert duration_int(5400.9) == 5400  # float truncates, like yt-dlp's seconds
+    assert duration_int("5400") == 5400  # lenient for a stringified queue value
+
+
+def test_duration_int_none_for_garbage():
+    assert duration_int(None) is None
+    assert duration_int("") is None
+    assert duration_int("N/A") is None
+    assert duration_int("not-a-number") is None
+    assert duration_int(object()) is None
+
+
+def test_duration_int_none_for_non_finite_floats():
+    # int(float("inf")) raises OverflowError, int(float("nan")) ValueError —
+    # both must degrade to None, never crash a stats write.
+    assert duration_int(float("inf")) is None
+    assert duration_int(float("-inf")) is None
+    assert duration_int(float("nan")) is None

@@ -45,7 +45,9 @@ def _cmd_stats_backfill(args: argparse.Namespace) -> int:
         fetch_missing=args.fetch_missing,
         limit=args.limit,
     )
-    print(report["summary"], end="")
+    # summary() has no trailing newline; a plain print terminates the line so
+    # the next shell prompt doesn't run into the numbers.
+    print(report["summary"])
     return 0
 
 

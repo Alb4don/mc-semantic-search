@@ -240,6 +240,27 @@ def test_group_chunks_threads_duration_from_new_record():
     assert grouped["vid61"][0].duration == 5400
 
 
+def test_group_chunks_nulls_garbage_duration():
+    """A non-numeric duration from the untrusted queue degrades to None —
+    never a string, which SQLite would store as TEXT and SUM() would then
+    count as 0, silently under-reporting the archive's total duration."""
+    from mc.ingest.apply import _group_chunks
+
+    record = _record("vid61", 0)
+    record["duration"] = "not-a-number"
+    grouped = _group_chunks([record])
+    assert grouped["vid61"][0].duration is None
+
+
+def test_group_chunks_truncates_float_duration():
+    from mc.ingest.apply import _group_chunks
+
+    record = _record("vid61", 0)
+    record["duration"] = 5400.9
+    grouped = _group_chunks([record])
+    assert grouped["vid61"][0].duration == 5400
+
+
 def test_group_chunks_rejects_non_http_url():
     """Queue records are untrusted: url must be http(s) (producer emits YouTube
     watch URLs) or the whole file is quarantined."""

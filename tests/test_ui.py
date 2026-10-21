@@ -66,6 +66,28 @@ def test_format_archive_status_omits_unknown_stats():
     )
     assert partial == {"videos": "12"}  # only the known stat survives
 
+
+def test_format_archive_status_episode_without_date_still_shows():
+    """A known episode renders even when its upload date is unknown, so the
+    HTML stat agrees with the JSON envelope (which reports last_episode with a
+    null date) instead of hiding a fact the archive actually knows."""
+    status = _format_archive_status(
+        {"videos": 3, "seconds": None, "last_episode": 971, "last_episode_date": None}
+    )
+    assert status["last_episode"] == "#971"
+
+
+def test_format_archive_status_episode_and_date_together():
+    status = _format_archive_status(
+        {
+            "videos": 3,
+            "seconds": None,
+            "last_episode": 971,
+            "last_episode_date": "2026-10-20",
+        }
+    )
+    assert status["last_episode"] == "#971 · 2026-10-20"
+
 pytestmark = pytest.mark.integration
 
 QUERY_WORD = "bolha"

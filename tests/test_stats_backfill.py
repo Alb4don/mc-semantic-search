@@ -198,3 +198,46 @@ def test_garbage_transcript_is_skipped_not_fatal(tmp_path):
     )
     assert state.archive_stats()["seconds"] is None
     assert report["still_missing"] == 1
+
+
+def test_fetch_missing_skips_already_complete_videos(tmp_path):
+    """--fetch-missing targets videos *still lacking* a duration: a video whose
+    stats row already carries one is skipped in both modes, so a re-run
+    converges and never touches YouTube again."""
+    state, cache_dir, transcripts_dir = _ctx(tmp_path)
+    state.record_video_stats("v1", duration=5400, episode=971, date="2026-10-20")
+    _write_cache(cache_dir, "v1", {"episode": "971", "date": "2026-10-20"})  # no duration
+
+    def boom(_vid):
+        raise AssertionError("must not fetch a video that already has a duration")
+
+    report = run_stats_backfill(
+        state=state,
+        cache_dir=cache_dir,
+        transcripts_dir=transcripts_dir,
+        fetch_missing=True,
+        fetch=boom,
+        sleeper=lambda _: None,
+    )
+    assert report["fetched"] == 0
+    assert report["videos_skipped"] == 1
+    assert report["videos_backfilled"] == 0
+    assert state.archive_stats()["seconds"] == 5400
+
+
+def test_garbage_cache_duration_falls_through_to_transcript(tmp_path):
+    """A junk duration in a (hand-edited) cache entry must not crash — it
+    falls through to the transcript derivation instead."""
+    state, cache_dir, transcripts_dir = _ctx(tmp_path)
+    _write_cache(
+        cache_dir,
+        "v1",
+        {"episode": "1", "date": "2026-01-01", "duration": "not-a-number"},
+    )
+    _write_transcript(transcripts_dir, "v1", [{"start": 0.0, "duration": 15.0}])
+
+    report = run_stats_backfill(
+        state=state, cache_dir=cache_dir, transcripts_dir=transcripts_dir
+    )
+    assert state.archive_stats()["seconds"] == 15
+    assert report["videos_backfilled"] == 1

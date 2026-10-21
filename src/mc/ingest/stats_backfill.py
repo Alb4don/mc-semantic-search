@@ -22,11 +22,16 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from mc import config
-from mc.ingest.metadata import _default_fetch, _normalize, episode_int
+from mc.ingest.metadata import (
+    _default_fetch,
+    _normalize,
+    duration_int,
+    episode_int,
+)
 from mc.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -42,7 +47,6 @@ class StatsBackfillReport:
     videos_skipped: int = 0  # already complete — resumable no-op
     still_missing: int = 0  # duration still None after the run
     fetched: int = 0  # durations obtained via a yt-dlp fetch
-    notes: list[str] = field(default_factory=list)
 
     def summary(self, stats: dict) -> str:
         seconds = int(stats.get("seconds") or 0)
@@ -112,8 +116,9 @@ def _resolve_duration(
     A fetch (only when ``fetch_missing``) upgrades the cache file with the
     duration so it is fetched at most once ever.
     """
-    if cache.get("duration") is not None:
-        return int(cache["duration"]), False
+    cached = duration_int(cache.get("duration"))
+    if cached is not None:
+        return cached, False
 
     segments = _load_transcript(transcripts_dir, video_id)
     if segments is not None:
@@ -133,8 +138,9 @@ def _resolve_duration(
         (cache_dir / f"{video_id}.json").write_text(
             json.dumps(meta), encoding="utf-8"
         )
-        if meta.get("duration") is not None:
-            return int(meta["duration"]), True
+        fetched_duration = duration_int(meta.get("duration"))
+        if fetched_duration is not None:
+            return fetched_duration, True
 
     return None, False
 
@@ -173,9 +179,11 @@ def run_stats_backfill(
             break
         report.videos_considered += 1
 
-        # Resumable: a video that already has a duration is done — skip the
-        # (possibly expensive) resolution entirely, and never re-fetch it.
-        if not fetch_missing and state.video_duration(video_id) is not None:
+        # Resumable in BOTH modes: a video whose stats row already has a
+        # duration is done — skip the (possibly expensive) resolution. This is
+        # also what keeps `--fetch-missing` a one-shot: a video fetched on a
+        # previous run now has a duration, so it is never fetched again.
+        if state.video_duration(video_id) is not None:
             report.videos_skipped += 1
             continue
 

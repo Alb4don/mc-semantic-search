@@ -117,8 +117,11 @@ def _format_archive_status(raw: dict) -> dict:
     """
     stats: dict = {}
     episode, date = raw.get("last_episode"), raw.get("last_episode_date")
-    if episode is not None and date:
-        stats["last_episode"] = f"#{episode} · {date}"
+    if episode is not None:
+        # Render the episode even when its date is unknown, so the HTML fact
+        # agrees with the JSON envelope (which reports last_episode with a
+        # null date) instead of hiding something the archive knows.
+        stats["last_episode"] = f"#{episode} · {date}" if date else f"#{episode}"
     if raw.get("videos"):
         stats["videos"] = _fmt_int_pt(raw["videos"])
     duration = _duration_line(raw.get("seconds"))

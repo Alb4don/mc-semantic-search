@@ -22,7 +22,7 @@ from qdrant_client import QdrantClient
 
 from mc import config
 from mc.ingest.lock import RunLock
-from mc.ingest.metadata import episode_int
+from mc.ingest.metadata import duration_int, episode_int
 from mc.ingest.models import Chunk
 from mc.qdrant import client_kwargs, upsert_video
 from mc.state import StateStore
@@ -92,7 +92,10 @@ def _group_chunks(records: list[dict]) -> dict[str, list[Chunk]]:
                 date=record.get("date"),
                 episode=record.get("episode"),
                 channel=record.get("channel"),
-                duration=record.get("duration"),  # Story 6.1; old records lack it
+                # Story 6.1; old records lack it. Coerced because this is
+                # untrusted queue input: a non-numeric value must degrade to
+                # None, not poison SUM(duration) as SQLite TEXT.
+                duration=duration_int(record.get("duration")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"malformed record {record!r}: {exc}") from None

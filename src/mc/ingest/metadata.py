@@ -27,18 +27,26 @@ _MAX_ATTEMPTS = 3
 _YTDLP_TIMEOUT_S = 120
 
 
-def _duration_seconds(raw: dict) -> int | None:
-    """yt-dlp's ``duration`` in whole seconds (Story 6.1).
+def duration_int(value: object) -> int | None:
+    """Whole seconds as an int for storage/aggregates (Story 6.1).
 
-    yt-dlp returns an int or float of seconds; anything absent/non-numeric
-    (it sometimes yields ``"N/A"``) becomes ``None`` so downstream stats can
-    treat it as "unknown" rather than a bogus 0.
+    yt-dlp returns an int or float of seconds (it sometimes yields ``"N/A"``),
+    and a Mode B queue record is untrusted input, so coercion happens in ONE
+    place: anything absent/non-numeric → ``None`` (never a bogus 0). Keeping a
+    junk value out of ``video_stats.duration`` matters — SQLite would store a
+    string as TEXT and ``SUM(duration)`` would then count it as 0, silently
+    under-reporting the archive's total duration.
     """
-    value = raw.get("duration")
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: int(float("inf")); ValueError: int(float("nan")).
         return None
+
+
+def _duration_seconds(raw: dict) -> int | None:
+    """yt-dlp's ``duration`` in whole seconds (Story 6.1)."""
+    return duration_int(raw.get("duration"))
 
 
 def _default_fetch(video_id: str) -> dict:
