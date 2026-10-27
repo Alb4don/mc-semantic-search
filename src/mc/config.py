@@ -38,6 +38,11 @@ QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
 
 # --- API ---
 API_PORT = int(os.environ.get("API_PORT", "8080"))
+# Canonical origin the agent docs advertise (/llms.txt, /?render=json). Resolved
+# here, never from the request Host, so a client-supplied header can't rewrite
+# the endpoints an agent is told to follow. Trailing slash trimmed for clean
+# path concatenation.
+PUBLIC_URL = os.environ.get("MC_PUBLIC_URL", "https://muriel.eddieoz.com").rstrip("/")
 FRESHNESS_MAX_HOURS = int(os.environ.get("FRESHNESS_MAX_HOURS", "72"))
 SEARCH_QUOTE_BOOST = float(os.environ.get("SEARCH_QUOTE_BOOST", "0.5"))
 SEARCH_CACHE_SIZE = int(os.environ.get("SEARCH_CACHE_SIZE", "128"))
